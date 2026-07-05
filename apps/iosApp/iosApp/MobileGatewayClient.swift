@@ -40,7 +40,7 @@ struct AgentsResponse: Decodable {
     let agents: [AgentInfo]
 }
 
-struct SessionSummary: Decodable, Identifiable {
+struct SessionSummary: Decodable, Identifiable, Hashable {
     let id: String
     let title: String
     let status: String

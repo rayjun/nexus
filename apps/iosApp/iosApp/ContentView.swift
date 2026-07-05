@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var agentNameDraft = ""
     @State private var agentUrlDraft = ""
     @State private var isAddingAgent = false
+    @State private var isShowingAddServer = false
     @State private var removingAgentId: String?
 
     private var isConnected: Bool {
@@ -55,8 +56,10 @@ struct ContentView: View {
         .sheet(isPresented: $isShowingComposer) {
             goalComposer
         }
-        .sheet(item: $selectedSession) { session in
-            sessionDetail(session)
+        .fullScreenCover(item: $selectedSession) { session in
+            NavigationStack {
+                sessionDetail(session)
+            }
         }
     }
 
@@ -125,7 +128,6 @@ struct ContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 24)
         }
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     @ViewBuilder
@@ -168,68 +170,136 @@ struct ContentView: View {
 
     private var agentServerList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                managerOverview
-                VStack(alignment: .leading, spacing: 12) {
-                    sectionHeader("AGENT SERVERS", count: agents.count)
-                    if isLoadingAgents {
-                        loadingRows
-                    } else if agents.isEmpty {
-                        emptyState(title: "No agent servers", subtitle: "Add a Hermes server to manage it from this phone.")
-                    } else {
-                        ForEach(agents) { agent in
-                            agentServerRow(agent)
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(spacing: 10) {
+                    Text("Hermes")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(HermesMobileStyle.text)
+                    Spacer()
+                    Button {
+                        Task { await loadHome() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        agentNameDraft = ""
+                        agentUrlDraft = ""
+                        isShowingAddServer = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(HermesMobileStyle.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 8)
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(HermesMobileStyle.blue)
+                        .frame(width: 7, height: 7)
+                    Text("\(agents.filter { $0.status == "online" }.count) of \(agents.count) servers online")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(HermesMobileStyle.muted)
+                }
+
+                if isLoadingAgents {
+                    loadingRows
+                        .padding(.horizontal, 2)
+                } else if agents.isEmpty {
+                    VStack(alignment: .center, spacing: 14) {
+                        Image(systemName: "server.rack")
+                            .font(.system(size: 40))
+                            .foregroundStyle(HermesMobileStyle.subtleText)
+                        Text("No servers yet")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                        Button {
+                            agentNameDraft = ""
+                            agentUrlDraft = ""
+                            isShowingAddServer = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "plus")
+                                Text("Add Server")
+                            }
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 20)
+                            .frame(height: 44)
+                            .background(HermesMobileStyle.blue, in: Capsule())
                         }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else {
+                    ForEach(agents) { agent in
+                        agentServerCard(agent)
+                    }
                 }
-                .cardStyle()
-                addAgentServerPanel
-                if !statusMessage.isEmpty {
-                    statusPill(text: statusMessage, positive: !statusMessage.lowercased().contains("error"))
+
+                if !statusMessage.isEmpty && statusMessage.lowercased().contains("error") {
+                    statusPill(text: statusMessage, positive: false)
                 }
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 20)
             .padding(.top, 10)
             .padding(.bottom, 28)
         }
+        .background(HermesMobileStyle.background)
+        .sheet(isPresented: $isShowingAddServer) {
+            addServerSheet
+        }
     }
 
-    private var managerOverview: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                iconTile("square.stack.3d.up.fill")
-                    .frame(width: 42, height: 42)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("SERVER DIRECTORY")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .tracking(2.2)
-                        .foregroundStyle(HermesMobileStyle.blue)
-                    Text("Choose where Hermes runs")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(HermesMobileStyle.text)
-                    Text("Manage gateway endpoints first, then enter a server for inbox, sessions, automations, and goals.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(HermesMobileStyle.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+    private var addServerSheet: some View {
+        NavigationStack {
+            ZStack {
+                HermesMobileStyle.background.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 16) {
+                    desktopField(title: "SERVER NAME", text: $agentNameDraft, placeholder: "Local Hermes", systemImage: "server.rack")
+                    desktopField(title: "SERVER URL", text: $agentUrlDraft, placeholder: "http://100.x.y.z:8765", systemImage: "network")
+                    Spacer()
+                    Button {
+                        Task {
+                            await addAgent()
+                            if !statusMessage.lowercased().contains("error") {
+                                isShowingAddServer = false
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if isAddingAgent {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "plus.circle.fill")
+                            }
+                            Text(isAddingAgent ? "Adding" : "Add server")
+                                .font(.system(size: 16, weight: .semibold))
+                            Spacer()
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .frame(height: 50)
+                        .background(canAddAgent ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    }
+                    .disabled(!canAddAgent || isAddingAgent)
                 }
-                Spacer()
-                Button {
-                    Task { await loadHome() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(HermesMobileStyle.muted)
-                        .frame(width: 38, height: 38)
-                        .background(HermesMobileStyle.row, in: Circle())
-                }
-                .buttonStyle(.plain)
+                .padding(18)
             }
-            HStack(spacing: 8) {
-                statusChip(icon: "server.rack", text: "\(agents.count) servers", color: HermesMobileStyle.text)
-                statusChip(icon: "checkmark", text: "\(agents.filter { $0.status == "online" }.count) online", color: HermesMobileStyle.green)
+            .navigationTitle("Add Server")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { isShowingAddServer = false }
+                }
             }
         }
-        .cardStyle()
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 
     private var statusStrip: some View {
@@ -311,71 +381,76 @@ struct ContentView: View {
         }
     }
 
-    private var addAgentServerPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("ADD SERVER", count: 2)
-            desktopField(title: "SERVER NAME", text: $agentNameDraft, placeholder: "Local Hermes", systemImage: "server.rack")
-            desktopField(title: "SERVER URL", text: $agentUrlDraft, placeholder: "http://127.0.0.1:8766", systemImage: "network")
-            Button {
-                Task { await addAgent() }
-            } label: {
-                HStack {
-                    if isAddingAgent {
-                        ProgressView().tint(.white)
-                    } else {
-                        Image(systemName: "plus.circle.fill")
+    private func agentServerCard(_ agent: AgentInfo) -> some View {
+        let isOnline = agent.status == "online"
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(isOnline ? HermesMobileStyle.blue.opacity(0.12) : HermesMobileStyle.line.opacity(0.5))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: "server.rack")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(isOnline ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(agent.name)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(HermesMobileStyle.text)
+                    Text(agent.baseUrl)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(HermesMobileStyle.muted)
+                        .lineLimit(1)
+                }
+                Spacer()
+                if agent.id != "agent_vps" {
+                    Button {
+                        Task { await removeAgent(agent) }
+                    } label: {
+                        if removingAgentId == agent.id {
+                            ProgressView().frame(width: 22, height: 22)
+                        } else {
+                            Image(systemName: "minus.circle")
+                                .font(.system(size: 18))
+                                .foregroundStyle(.red.opacity(0.7))
+                        }
                     }
-                    Text(isAddingAgent ? "Adding" : "Add agent server")
-                        .font(.system(size: 15, weight: .semibold))
-                    Spacer()
+                    .disabled(removingAgentId == agent.id)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .frame(height: 44)
-                .background(canAddAgent ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             }
-            .disabled(!canAddAgent || isAddingAgent)
-        }
-        .cardStyle()
-    }
+            .padding(16)
 
-    private func agentServerRow(_ agent: AgentInfo) -> some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(agent.status == "online" ? HermesMobileStyle.green : HermesMobileStyle.subtleText)
-                .frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(agent.name)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
-                Text(agent.baseUrl)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(HermesMobileStyle.muted)
-                    .lineLimit(1)
-                Text("\(agent.profile) · \(agent.model) · \(agent.status)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(agent.status == "online" ? HermesMobileStyle.green : HermesMobileStyle.muted)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(HermesMobileStyle.subtleText)
-            Button {
-                Task { await removeAgent(agent) }
-            } label: {
-                if removingAgentId == agent.id {
-                    ProgressView().frame(width: 24, height: 24)
-                } else {
-                    Image(systemName: "minus.circle")
-                        .font(.system(size: 20))
-                        .foregroundStyle(agent.id == "agent_vps" ? HermesMobileStyle.subtleText : .red)
+            HStack(spacing: 12) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(isOnline ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                        .frame(width: 6, height: 6)
+                    Text(isOnline ? "Online" : "Offline")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(isOnline ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
                 }
+                Text("·")
+                    .foregroundStyle(HermesMobileStyle.subtleText)
+                Text(agent.profile)
+                    .font(.system(size: 12))
+                    .foregroundStyle(HermesMobileStyle.muted)
+                Text("·")
+                    .foregroundStyle(HermesMobileStyle.subtleText)
+                Text(agent.model)
+                    .font(.system(size: 12))
+                    .foregroundStyle(HermesMobileStyle.muted)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(HermesMobileStyle.subtleText)
             }
-            .disabled(agent.id == "agent_vps" || removingAgentId == agent.id)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
+            .background(.white)
         }
-        .padding(12)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onTapGesture {
             selectedAgentServer = agent
         }
@@ -498,64 +573,67 @@ struct ContentView: View {
     }
 
     private func sessionDetail(_ session: SessionSummary) -> some View {
-        NavigationStack {
-            ZStack {
-                HermesMobileStyle.background.ignoresSafeArea()
-                VStack(spacing: 0) {
+        ZStack {
+            HermesMobileStyle.background.ignoresSafeArea()
+            VStack(spacing: 0) {
+                ScrollViewReader { proxy in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(session.status.uppercased())
-                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                    .tracking(2.2)
-                                    .foregroundStyle(session.status == "running" ? HermesMobileStyle.green : HermesMobileStyle.muted)
-                                Text(session.title)
-                                    .font(.system(size: 25, weight: .semibold))
-                                    .foregroundStyle(HermesMobileStyle.text)
-                                Text(session.id)
-                                    .font(.system(size: 12, design: .monospaced))
-                                    .foregroundStyle(HermesMobileStyle.muted)
-                            }
-                            .cardStyle()
-
-                            VStack(alignment: .leading, spacing: 12) {
-                                sectionHeader("TIMELINE", count: selectedTimeline?.items.count ?? 0)
-                                if isLoadingTimeline {
-                                    loadingRows
-                                } else if !timelineError.isEmpty {
-                                    emptyState(title: "Timeline unavailable", subtitle: timelineError)
-                                } else if let timeline = selectedTimeline, !timeline.items.isEmpty {
-                                    ForEach(timeline.items) { item in
-                                        timelineRow(item)
-                                    }
-                                } else {
-                                    emptyState(title: "No timeline items", subtitle: "This session has no visible messages yet.")
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            if isLoadingTimeline {
+                                loadingRows
+                            } else if !timelineError.isEmpty {
+                                emptyState(title: "Timeline unavailable", subtitle: timelineError)
+                                    .padding(.top, 40)
+                            } else if let timeline = selectedTimeline, !timeline.items.isEmpty {
+                                ForEach(Array(timeline.items.enumerated()), id: \.element.id) { index, item in
+                                    chatBubble(item)
+                                        .id(item.id)
                                 }
+                            } else {
+                                emptyState(title: "No messages yet", subtitle: "Send a message to start the conversation.")
+                                    .padding(.top, 40)
                             }
-                            .cardStyle()
                         }
-                        .padding(18)
-                        .padding(.bottom, 92)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 100)
                     }
-                    followUpBar(for: session)
+                    .onChange(of: selectedTimeline?.items.last?.id) { lastId in
+                        if let lastId {
+                            withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
+                        }
+                    }
+                    .onAppear {
+                        if let lastId = selectedTimeline?.items.last?.id {
+                            proxy.scrollTo(lastId, anchor: .bottom)
+                        }
+                    }
                 }
-            }
-            .navigationTitle("Session")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { selectedSession = nil }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Refresh") { Task { await loadTimeline(for: session) } }
-                }
-            }
-            .task(id: session.id) {
-                await loadTimeline(for: session)
+                followUpBar(for: session)
             }
         }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        .navigationTitle(session.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    selectedSession = nil
+                } label: {
+                    Image(systemName: "chevron.left")
+                    Text("Sessions")
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await loadTimeline(for: session) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+        .task(id: session.id) {
+            await loadTimeline(for: session)
+        }
     }
 
     private func followUpBar(for session: SessionSummary) -> some View {
@@ -595,59 +673,88 @@ struct ContentView: View {
         !followUpDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !deviceToken.isEmpty
     }
 
-    private func timelineRow(_ item: TimelineItem) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: timelineIcon(item.type))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(timelineTint(item.type))
-                .frame(width: 30, height: 30)
-                .background(timelineTint(item.type).opacity(0.09), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            VStack(alignment: .leading, spacing: 7) {
-                Text(timelineTitle(item))
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
-                if let body = item.text ?? item.markdown, !body.isEmpty {
-                    Text(body)
-                        .font(.system(size: 13))
-                        .foregroundStyle(HermesMobileStyle.muted)
-                        .lineLimit(6)
-                }
-                if let calls = item.toolCalls, !calls.isEmpty {
-                    VStack(alignment: .leading, spacing: 5) {
-                        ForEach(calls.prefix(6)) { call in
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(call.status == "failed" ? .red : HermesMobileStyle.subtleText)
-                                    .frame(width: 5, height: 5)
-                                Text(call.summary)
-                                    .font(.system(size: 12, design: .monospaced))
-                                    .foregroundStyle(call.status == "failed" ? .red : HermesMobileStyle.muted)
-                                    .lineLimit(1)
+    private func chatBubble(_ item: TimelineItem) -> some View {
+        let isUser = item.type == "user_goal"
+        let isThinking = item.type == "thinking_block"
+        let body = item.text ?? item.markdown ?? ""
+
+        return HStack(alignment: .top, spacing: 10) {
+            if isUser { Spacer(minLength: 40) }
+
+            if isThinking {
+                DisclosureGroup("Thinking") {
+                    if !body.isEmpty {
+                        MarkdownText(text: body, textColor: HermesMobileStyle.subtleText)
+                    }
+                    if let calls = item.toolCalls, !calls.isEmpty {
+                        VStack(alignment: .leading, spacing: 3) {
+                            ForEach(calls.prefix(6)) { call in
+                                HStack(spacing: 5) {
+                                    Circle()
+                                        .fill(call.status == "failed" ? .red : HermesMobileStyle.subtleText)
+                                        .frame(width: 4, height: 4)
+                                    Text(call.summary)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(HermesMobileStyle.subtleText)
+                                        .lineLimit(1)
+                                }
                             }
                         }
                     }
                 }
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(HermesMobileStyle.subtleText)
+                .tint(HermesMobileStyle.subtleText)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(HermesMobileStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    if body.isEmpty {
+                        Text(timelineTitle(item))
+                            .font(.system(size: 15))
+                            .foregroundStyle(isUser ? .white : HermesMobileStyle.text)
+                    } else {
+                        MarkdownText(text: body, textColor: isUser ? .white : HermesMobileStyle.text)
+                    }
+
+                    if let calls = item.toolCalls, !calls.isEmpty {
+                        DisclosureGroup("Tool calls (\(calls.count))") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(calls.prefix(8)) { call in
+                                    HStack(spacing: 5) {
+                                        Circle()
+                                            .fill(call.status == "failed" ? .red : (call.status == "running" ? HermesMobileStyle.blue : HermesMobileStyle.subtleText))
+                                            .frame(width: 5, height: 5)
+                                        Text(call.summary)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundStyle(call.status == "failed" ? .red : HermesMobileStyle.muted)
+                                            .lineLimit(2)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                }
+                            }
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(HermesMobileStyle.subtleText)
+                        .tint(HermesMobileStyle.subtleText)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(
+                    isUser ? HermesMobileStyle.blue : .white,
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(isUser ? Color.clear : HermesMobileStyle.border, lineWidth: 1)
+                )
             }
-            Spacer()
-        }
-        .padding(12)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
 
-    private func timelineIcon(_ type: String) -> String {
-        switch type {
-        case "user_goal": "target"
-        case "thinking_block": "gearshape.2"
-        case "assistant_result": "text.bubble"
-        default: "circle"
-        }
-    }
-
-    private func timelineTint(_ type: String) -> Color {
-        switch type {
-        case "user_goal": HermesMobileStyle.blue
-        case "thinking_block": HermesMobileStyle.green
-        default: HermesMobileStyle.text
+            if !isUser && !isThinking { Spacer(minLength: 40) }
         }
     }
 
@@ -1000,6 +1107,135 @@ private extension View {
             .background(HermesMobileStyle.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
             .shadow(color: Color.black.opacity(0.035), radius: 16, x: 0, y: 8)
+    }
+}
+
+private struct MarkdownText: View {
+    let text: String
+    let textColor: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .codeBlock(let code):
+                    Text(code)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(textColor)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                case .heading(let level, let content):
+                    Text(inlineAttributed(content))
+                        .font(.system(size: level == 1 ? 20 : (level == 2 ? 17 : 15), weight: .bold))
+                        .foregroundStyle(textColor)
+                case .paragraph(let content):
+                    Text(inlineAttributed(content))
+                        .font(.system(size: 15))
+                        .foregroundStyle(textColor)
+                case .bullet(let content):
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•")
+                            .font(.system(size: 15))
+                            .foregroundStyle(textColor)
+                        Text(inlineAttributed(content))
+                            .font(.system(size: 15))
+                            .foregroundStyle(textColor)
+                    }
+                }
+            }
+        }
+    }
+
+    private enum Block {
+        case codeBlock(String)
+        case heading(Int, String)
+        case paragraph(String)
+        case bullet(String)
+    }
+
+    private var blocks: [Block] {
+        var result: [Block] = []
+        let lines = text.components(separatedBy: "\n")
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            if line.hasPrefix("```") {
+                var codeLines: [String] = []
+                i += 1
+                while i < lines.count && !lines[i].hasPrefix("```") {
+                    codeLines.append(lines[i])
+                    i += 1
+                }
+                if i < lines.count { i += 1 }
+                result.append(.codeBlock(codeLines.joined(separator: "\n")))
+            } else if line.hasPrefix("### ") {
+                result.append(.heading(3, String(line.dropFirst(4))))
+                i += 1
+            } else if line.hasPrefix("## ") {
+                result.append(.heading(2, String(line.dropFirst(3))))
+                i += 1
+            } else if line.hasPrefix("# ") {
+                result.append(.heading(1, String(line.dropFirst(2))))
+                i += 1
+            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                result.append(.bullet(String(line.dropFirst(2))))
+                i += 1
+            } else if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                i += 1
+            } else {
+                result.append(.paragraph(line))
+                i += 1
+            }
+        }
+        return result
+    }
+
+    private func inlineAttributed(_ s: String) -> AttributedString {
+        var result = AttributedString()
+        var remaining = s
+        while !remaining.isEmpty {
+            if let range = remaining.range(of: "`") {
+                let before = String(remaining[..<range.lowerBound])
+                remaining = String(remaining[range.upperBound...])
+                if let closeRange = remaining.range(of: "`") {
+                    let code = String(remaining[..<closeRange.lowerBound])
+                    remaining = String(remaining[closeRange.upperBound...])
+                    if !before.isEmpty {
+                        result.append(AttributedString(before))
+                    }
+                    var codeAttr = AttributedString(code)
+                    codeAttr.font = .system(.body, design: .monospaced)
+                    codeAttr.foregroundColor = textColor
+                    codeAttr.backgroundColor = .black.opacity(0.06)
+                    result.append(codeAttr)
+                } else {
+                    result.append(AttributedString(before + "`" + remaining))
+                    remaining = ""
+                }
+            } else if let range = remaining.range(of: "**") {
+                let before = String(remaining[..<range.lowerBound])
+                remaining = String(remaining[range.upperBound...])
+                if let closeRange = remaining.range(of: "**") {
+                    let bold = String(remaining[..<closeRange.lowerBound])
+                    remaining = String(remaining[closeRange.upperBound...])
+                    if !before.isEmpty {
+                        result.append(AttributedString(before))
+                    }
+                    var boldAttr = AttributedString(bold)
+                    boldAttr.font = .system(.body, design: .default).bold()
+                    boldAttr.foregroundColor = textColor
+                    result.append(boldAttr)
+                } else {
+                    result.append(AttributedString(before + "**" + remaining))
+                    remaining = ""
+                }
+            } else {
+                result.append(AttributedString(remaining))
+                remaining = ""
+            }
+        }
+        return result
     }
 }
 
