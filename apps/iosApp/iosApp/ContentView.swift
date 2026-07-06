@@ -610,8 +610,14 @@ struct ContentView: View {
             .navigationTitle("New Agent")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isShowingCreateAgent = false }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isShowingCreateAgent = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                    }
                 }
             }
         }
