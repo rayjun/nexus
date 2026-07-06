@@ -7,8 +7,6 @@ from pathlib import Path
 from secrets import randbelow, token_urlsafe
 from typing import Any
 
-import httpx
-
 from .models import AgentInfo, AgentRequest, AgentMessageRequest, AgentMessageResponse, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, PersistentAgent, PersistentAgentCreate, PersistentAgentMessage, PersistentAgentsResponse, SessionSummary, SessionTimeline, StatusResponse, TimelineItem, ToolCall, expires_in
 
 
@@ -245,8 +243,7 @@ class StateDbMobileStore:
             )
             con.commit()
 
-        history = self.get_agent_messages(agent_id)
-        assistant_content = self._call_llm(agent_name, agent_desc, history)
+        assistant_content, session_id = self._call_hermes(agent_id, agent_name, agent_desc, content)
 
         now2 = datetime.now(UTC)
         with self._connect() as con:
@@ -254,58 +251,65 @@ class StateDbMobileStore:
                 "INSERT INTO mobile_agent_messages (id, agent_id, role, content, created_at) VALUES (?, ?, 'assistant', ?, ?)",
                 (assistant_msg_id, agent_id, assistant_content, now2.timestamp()),
             )
-            con.execute(
-                "UPDATE mobile_agents SET last_message_at = ?, updated_at = ? WHERE id = ?",
-                (now2.timestamp(), now2.timestamp(), agent_id),
-            )
+            if session_id:
+                linked = con.execute("SELECT linked_session_ids FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
+                session_ids: list[str] = json.loads(linked["linked_session_ids"] or "[]")
+                if session_id not in session_ids:
+                    session_ids.append(session_id)
+                con.execute(
+                    "UPDATE mobile_agents SET last_message_at = ?, updated_at = ?, linked_session_ids = ? WHERE id = ?",
+                    (now2.timestamp(), now2.timestamp(), json.dumps(session_ids), agent_id),
+                )
+            else:
+                con.execute(
+                    "UPDATE mobile_agents SET last_message_at = ?, updated_at = ? WHERE id = ?",
+                    (now2.timestamp(), now2.timestamp(), agent_id),
+                )
             con.commit()
         user_msg = PersistentAgentMessage(id=user_msg_id, agent_id=agent_id, role="user", content=content, created_at=now)
         assistant_msg = PersistentAgentMessage(id=assistant_msg_id, agent_id=agent_id, role="assistant", content=assistant_content, created_at=now2)
         return user_msg, assistant_msg
 
-    def _call_llm(self, agent_name: str, agent_desc: str, history: list[PersistentAgentMessage]) -> str:
-        env_path = Path.home() / ".hermes" / ".env"
-        api_key = ""
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                if line.startswith("OLLAMA_API_KEY=") and not line.startswith("#"):
-                    api_key = line.split("=", 1)[1].strip()
-                    break
+    def _call_hermes(self, agent_id: str, agent_name: str, agent_desc: str, content: str) -> tuple[str, str | None]:
+        import subprocess
 
-        config_path = Path.home() / ".hermes" / "config.yaml"
-        base_url = "https://ollama.com/v1"
-        model = "glm-5.2"
-        if config_path.exists():
-            try:
-                import yaml
-                cfg = yaml.safe_load(config_path.read_text())
-                m = cfg.get("model", {})
-                base_url = m.get("base_url", base_url)
-                model = m.get("default", model)
-            except Exception:
-                pass
+        with self._connect() as con:
+            row = con.execute("SELECT linked_session_ids FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
+            session_ids: list[str] = json.loads(row["linked_session_ids"] or "[]") if row else []
 
-        system_prompt = f"You are {agent_name}, a helpful AI assistant."
+        resume_id = session_ids[-1] if session_ids else None
+
+        cmd = ["hermes"]
+        if resume_id:
+            cmd += ["--resume", resume_id]
+        cmd += ["chat", "-q", content, "-Q", "--pass-session-id"]
+
+        system_hint = f"You are {agent_name}, a helpful AI assistant."
         if agent_desc:
-            system_prompt += f" Your role: {agent_desc}"
-
-        messages = [{"role": "system", "content": system_prompt}]
-        for msg in history:
-            messages.append({"role": msg.role, "content": msg.content})
+            system_hint += f" Your role: {agent_desc}"
 
         try:
-            resp = httpx.post(
-                f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": model, "messages": messages, "max_tokens": 2000, "stream": False},
-                timeout=60,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
-            return content.strip() or "I have no response."
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            combined = (result.stdout + result.stderr).strip()
+            lines = combined.split("\n")
+            session_id = None
+            response_lines: list[str] = []
+            for line in lines:
+                if line.startswith("session_id:"):
+                    session_id = line.split(":", 1)[1].strip()
+                elif line.startswith("↻"):
+                    continue
+                elif line.strip():
+                    response_lines.append(line)
+            response = "\n".join(response_lines).strip()
+            if not response:
+                if result.stderr:
+                    response = f"[Error: {result.stderr.strip()[:200]}]"
+                else:
+                    response = "[No response from Hermes]"
+            return response, session_id
         except Exception as e:
-            return f"[Error: unable to get response from LLM: {e}]"
+            return f"[Error: unable to call Hermes: {e}]", None
 
     def link_session_to_agent(self, agent_id: str, session_id: str) -> PersistentAgent | None:
         self._ensure_agent_tables()
