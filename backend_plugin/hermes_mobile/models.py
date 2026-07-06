@@ -102,6 +102,47 @@ class AgentRequest(BaseModel):
     base_url: str = Field(min_length=1, max_length=500)
 
 
+class PersistentAgent(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    capabilities: list[str] = Field(default_factory=list)
+    linked_session_ids: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+    last_message_at: datetime | None = None
+
+
+class PersistentAgentCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+
+
+class PersistentAgentMessage(BaseModel):
+    id: str
+    agent_id: str
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime
+
+
+class PersistentAgentMessagesResponse(BaseModel):
+    messages: list[PersistentAgentMessage]
+
+
+class PersistentAgentsResponse(BaseModel):
+    agents: list[PersistentAgent]
+
+
+class AgentMessageRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=8000)
+
+
+class AgentMessageResponse(BaseModel):
+    user_message: PersistentAgentMessage
+    assistant_message: PersistentAgentMessage
+
+
 class AgentsResponse(BaseModel):
     agents: list[AgentInfo]
 

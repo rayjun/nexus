@@ -18,6 +18,8 @@ from .models import (
     PairingCompleteRequest,
     PairingCompleteResponse,
     PairingStartResponse,
+    PersistentAgent,
+    PersistentAgentMessage,
     RiskLevel,
     SessionSummary,
     SessionTimeline,
@@ -294,6 +296,34 @@ class MockMobileStore:
         if agent_id == "agent_vps":
             return False
         return self.agents.pop(agent_id, None) is not None
+
+    def list_persistent_agents(self) -> list[PersistentAgent]:
+        return []
+
+    def create_persistent_agent(self, name: str, description: str = "") -> PersistentAgent:
+        now = now_utc()
+        return PersistentAgent(
+            id=f"agent_{token_urlsafe(8)}",
+            name=name,
+            description=description,
+            created_at=now,
+            updated_at=now,
+        )
+
+    def delete_persistent_agent(self, agent_id: str) -> bool:
+        return False
+
+    def get_agent_messages(self, agent_id: str) -> list[PersistentAgentMessage]:
+        return []
+
+    def send_agent_message(self, agent_id: str, content: str) -> tuple[PersistentAgentMessage, PersistentAgentMessage]:
+        now = now_utc()
+        user_msg = PersistentAgentMessage(id=f"msg_{token_urlsafe(8)}", agent_id=agent_id, role="user", content=content, created_at=now)
+        assistant_msg = PersistentAgentMessage(id=f"msg_{token_urlsafe(8)}", agent_id=agent_id, role="assistant", content="Placeholder response.", created_at=now)
+        return user_msg, assistant_msg
+
+    def link_session_to_agent(self, agent_id: str, session_id: str) -> PersistentAgent | None:
+        return None
 
     def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None:
         self.approval_audit_log.append(

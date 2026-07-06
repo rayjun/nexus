@@ -7,7 +7,7 @@ from pathlib import Path
 from secrets import randbelow, token_urlsafe
 from typing import Any
 
-from .models import AgentInfo, AgentRequest, Approval, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, SessionSummary, SessionTimeline, TimelineItem, ToolCall, expires_in
+from .models import AgentInfo, AgentRequest, AgentMessageRequest, AgentMessageResponse, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, PersistentAgent, PersistentAgentCreate, PersistentAgentMessage, PersistentAgentsResponse, SessionSummary, SessionTimeline, StatusResponse, TimelineItem, ToolCall, expires_in
 
 
 class StateDbMobileStore:
@@ -130,11 +130,178 @@ class StateDbMobileStore:
                 continue
             if agent.id != "agent_vps":
                 self.agents[agent.id] = agent
+        self._ensure_agent_tables()
 
     def _persist_agents(self) -> None:
         self.agents_path.parent.mkdir(parents=True, exist_ok=True)
         managed = [agent.model_dump(mode="json") for agent in self.agents.values() if agent.id != "agent_vps"]
         self.agents_path.write_text(json.dumps({"agents": managed}, indent=2, ensure_ascii=False))
+
+    def _ensure_agent_tables(self) -> None:
+        with self._connect() as con:
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mobile_agents (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT DEFAULT '',
+                    capabilities TEXT DEFAULT '[]',
+                    linked_session_ids TEXT DEFAULT '[]',
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    last_message_at REAL
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mobile_agent_messages (
+                    id TEXT PRIMARY KEY,
+                    agent_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    FOREIGN KEY (agent_id) REFERENCES mobile_agents(id)
+                )
+                """
+            )
+            con.commit()
+
+    def list_persistent_agents(self) -> list[PersistentAgent]:
+        self._ensure_agent_tables()
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT id, name, description, capabilities, linked_session_ids, created_at, updated_at, last_message_at FROM mobile_agents ORDER BY COALESCE(last_message_at, created_at) DESC"
+            ).fetchall()
+        return [self._persistent_agent(row) for row in rows]
+
+    def create_persistent_agent(self, name: str, description: str = "") -> PersistentAgent:
+        self._ensure_agent_tables()
+        agent_id = f"agent_{token_urlsafe(8)}"
+        now = datetime.now(UTC)
+        now_ts = now.timestamp()
+        with self._connect() as con:
+            con.execute(
+                "INSERT INTO mobile_agents (id, name, description, capabilities, linked_session_ids, created_at, updated_at, last_message_at) VALUES (?, ?, ?, '[]', '[]', ?, ?, NULL)",
+                (agent_id, name, description, now_ts, now_ts),
+            )
+            con.commit()
+        return PersistentAgent(
+            id=agent_id,
+            name=name,
+            description=description,
+            capabilities=[],
+            linked_session_ids=[],
+            created_at=now,
+            updated_at=now,
+        )
+
+    def delete_persistent_agent(self, agent_id: str) -> bool:
+        self._ensure_agent_tables()
+        with self._connect() as con:
+            row = con.execute("SELECT id FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
+            if not row:
+                return False
+            con.execute("DELETE FROM mobile_agent_messages WHERE agent_id = ?", (agent_id,))
+            con.execute("DELETE FROM mobile_agents WHERE id = ?", (agent_id,))
+            con.commit()
+        return True
+
+    def get_agent_messages(self, agent_id: str) -> list[PersistentAgentMessage]:
+        self._ensure_agent_tables()
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT id, agent_id, role, content, created_at FROM mobile_agent_messages WHERE agent_id = ? ORDER BY id ASC",
+                (agent_id,),
+            ).fetchall()
+        return [
+            PersistentAgentMessage(
+                id=row["id"],
+                agent_id=row["agent_id"],
+                role=row["role"],
+                content=row["content"],
+                created_at=self._dt(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    def send_agent_message(self, agent_id: str, content: str) -> tuple[PersistentAgentMessage, PersistentAgentMessage]:
+        self._ensure_agent_tables()
+        now = datetime.now(UTC)
+        now_ts = now.timestamp()
+        user_msg_id = f"msg_{token_urlsafe(8)}"
+        assistant_msg_id = f"msg_{token_urlsafe(8)}"
+        with self._connect() as con:
+            row = con.execute("SELECT id FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
+            if not row:
+                raise ValueError("agent_not_found")
+            con.execute(
+                "INSERT INTO mobile_agent_messages (id, agent_id, role, content, created_at) VALUES (?, ?, 'user', ?, ?)",
+                (user_msg_id, agent_id, content, now_ts),
+            )
+            assistant_content = f"Agent received your message. This is a placeholder response — real agent runtime integration is pending."
+            con.execute(
+                "INSERT INTO mobile_agent_messages (id, agent_id, role, content, created_at) VALUES (?, ?, 'assistant', ?, ?)",
+                (assistant_msg_id, agent_id, assistant_content, now_ts + 0.1),
+            )
+            con.execute(
+                "UPDATE mobile_agents SET last_message_at = ?, updated_at = ? WHERE id = ?",
+                (now_ts, now_ts, agent_id),
+            )
+            con.commit()
+        user_msg = PersistentAgentMessage(id=user_msg_id, agent_id=agent_id, role="user", content=content, created_at=now)
+        assistant_msg = PersistentAgentMessage(id=assistant_msg_id, agent_id=agent_id, role="assistant", content=assistant_content, created_at=now)
+        return user_msg, assistant_msg
+
+    def link_session_to_agent(self, agent_id: str, session_id: str) -> PersistentAgent | None:
+        self._ensure_agent_tables()
+        with self._connect() as con:
+            row = con.execute("SELECT id, name, description, capabilities, linked_session_ids, created_at, updated_at, last_message_at FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
+            if not row:
+                return None
+            linked: list[str] = json.loads(row["linked_session_ids"])
+            if session_id not in linked:
+                linked.append(session_id)
+            timeline = self.get_timeline(session_id)
+            caps: list[str] = json.loads(row["capabilities"])
+            if timeline:
+                for item in timeline.items:
+                    if item.tool_calls:
+                        for call in item.tool_calls:
+                            cap = f"Used {call.name}"
+                            if cap not in caps:
+                                caps.append(cap)
+            now_ts = datetime.now(UTC).timestamp()
+            con.execute(
+                "UPDATE mobile_agents SET capabilities = ?, linked_session_ids = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(caps), json.dumps(linked), now_ts, agent_id),
+            )
+            con.commit()
+            return self._persistent_agent_from_row(row, caps, linked)
+
+    def _persistent_agent(self, row: sqlite3.Row) -> PersistentAgent:
+        return PersistentAgent(
+            id=row["id"],
+            name=row["name"],
+            description=row["description"] or "",
+            capabilities=json.loads(row["capabilities"] or "[]"),
+            linked_session_ids=json.loads(row["linked_session_ids"] or "[]"),
+            created_at=self._dt(row["created_at"]),
+            updated_at=self._dt(row["updated_at"]),
+            last_message_at=self._dt(row["last_message_at"]) if row["last_message_at"] else None,
+        )
+
+    def _persistent_agent_from_row(self, row: sqlite3.Row, caps: list[str], linked: list[str]) -> PersistentAgent:
+        return PersistentAgent(
+            id=row["id"],
+            name=row["name"],
+            description=row["description"] or "",
+            capabilities=caps,
+            linked_session_ids=linked,
+            created_at=self._dt(row["created_at"]),
+            updated_at=self._dt(row["updated_at"]),
+            last_message_at=self._dt(row["last_message_at"]) if row["last_message_at"] else None,
+        )
 
     def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None:
         self.approval_audit_log.append(

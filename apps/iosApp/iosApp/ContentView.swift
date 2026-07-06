@@ -29,6 +29,16 @@ struct ContentView: View {
     @State private var isAddingAgent = false
     @State private var isShowingAddServer = false
     @State private var removingAgentId: String?
+    @State private var persistentAgents: [PersistentAgent] = []
+    @State private var selectedPersistentAgent: PersistentAgent?
+    @State private var agentMessages: [PersistentAgentMessage] = []
+    @State private var isLoadingAgents2 = false
+    @State private var isLoadingAgentMessages = false
+    @State private var agentInputDraft = ""
+    @State private var isSendingAgentMessage = false
+    @State private var isShowingCreateAgent = false
+    @State private var newAgentName = ""
+    @State private var newAgentDesc = ""
 
     private var isConnected: Bool {
         !deviceId.isEmpty && !deviceToken.isEmpty
@@ -55,6 +65,14 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isShowingComposer) {
             goalComposer
+        }
+        .sheet(isPresented: $isShowingCreateAgent) {
+            createAgentSheet
+        }
+        .fullScreenCover(item: $selectedPersistentAgent) { agent in
+            NavigationStack {
+                agentConversationView(agent)
+            }
         }
         .fullScreenCover(item: $selectedSession) { session in
             NavigationStack {
@@ -313,7 +331,7 @@ struct ContentView: View {
     private var segmentedRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(["Inbox", "Sessions", "Automations", "Artifacts"], id: \.self) { item in
+                ForEach(["Inbox", "Sessions", "Agents", "Automations", "Artifacts"], id: \.self) { item in
                     Button {
                         selectedSection = item
                     } label: {
@@ -357,6 +375,20 @@ struct ContentView: View {
                             sessionRow(session)
                         }
                         .buttonStyle(.plain)
+                    }
+                }
+            }
+            .cardStyle()
+        case "Agents":
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("AGENTS", count: persistentAgents.count)
+                if isLoadingAgents2 {
+                    loadingRows
+                } else if persistentAgents.isEmpty {
+                    emptyState(title: "No agents yet", subtitle: "Tap + to create a persistent agent.")
+                } else {
+                    ForEach(persistentAgents) { agent in
+                        agentCardRow(agent)
                     }
                 }
             }
@@ -467,24 +499,272 @@ struct ContentView: View {
         .redacted(reason: .placeholder)
     }
 
-    private var commandBar: some View {
+    private func agentCardRow(_ agent: PersistentAgent) -> some View {
         Button {
-            goalDraft = ""
-            isShowingComposer = true
+            selectedPersistentAgent = agent
+            agentMessages = []
+            Task { await loadAgentMessages(agent) }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "plus")
+                ZStack {
+                    Circle()
+                        .fill(HermesMobileStyle.blue.opacity(0.12))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(HermesMobileStyle.blue)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(agent.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(HermesMobileStyle.text)
+                    if !agent.description.isEmpty {
+                        Text(agent.description)
+                            .font(.system(size: 12))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                            .lineLimit(1)
+                    }
+                    HStack(spacing: 8) {
+                        Text("\(agent.capabilities.count) capabilities")
+                            .font(.system(size: 11))
+                            .foregroundStyle(HermesMobileStyle.subtleText)
+                        Text("·")
+                            .foregroundStyle(HermesMobileStyle.subtleText)
+                        Text("\(agent.linkedSessionIds.count) sessions")
+                            .font(.system(size: 11))
+                            .foregroundStyle(HermesMobileStyle.subtleText)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(HermesMobileStyle.subtleText)
+            }
+            .padding(12)
+            .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                Task { await deleteAgent(agent) }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    private var createAgentSheet: some View {
+        NavigationStack {
+            ZStack {
+                HermesMobileStyle.background.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 16) {
+                    desktopField(title: "AGENT NAME", text: $newAgentName, placeholder: "Code Reviewer", systemImage: "sparkles")
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "text.alignleft")
+                            Text("DESCRIPTION")
+                        }
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .tracking(1.7)
+                        .foregroundStyle(HermesMobileStyle.blue)
+                        TextField("What does this agent do?", text: $newAgentDesc, axis: .vertical)
+                            .font(.system(size: 15))
+                            .textInputAutocapitalization(.sentences)
+                            .lineLimit(1...3)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                    }
+                    Spacer()
+                    Button {
+                        Task {
+                            await createAgent()
+                            if !statusMessage.lowercased().contains("error") {
+                                isShowingCreateAgent = false
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if isLoadingAgents2 {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "sparkles")
+                            }
+                            Text(isLoadingAgents2 ? "Creating" : "Create agent")
+                                .font(.system(size: 16, weight: .semibold))
+                            Spacer()
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .frame(height: 50)
+                        .background(!newAgentName.isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    }
+                    .disabled(newAgentName.isEmpty || isLoadingAgents2)
+                }
+                .padding(18)
+            }
+            .navigationTitle("New Agent")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { isShowingCreateAgent = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func agentConversationView(_ agent: PersistentAgent) -> some View {
+        ZStack {
+            HermesMobileStyle.background.ignoresSafeArea()
+            VStack(spacing: 0) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            if !agent.capabilities.isEmpty {
+                                DisclosureGroup("Capabilities (\(agent.capabilities.count))") {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        ForEach(agent.capabilities, id: \.self) { cap in
+                                            HStack(spacing: 5) {
+                                                Image(systemName: "checkmark.circle")
+                                                    .font(.system(size: 10))
+                                                    .foregroundStyle(HermesMobileStyle.blue)
+                                                Text(cap)
+                                                    .font(.system(size: 12))
+                                                    .foregroundStyle(HermesMobileStyle.muted)
+                                            }
+                                        }
+                                    }
+                                }
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(HermesMobileStyle.subtleText)
+                                .tint(HermesMobileStyle.subtleText)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(HermesMobileStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            if isLoadingAgentMessages {
+                                loadingRows
+                            } else if agentMessages.isEmpty {
+                                emptyState(title: "No messages yet", subtitle: "Send a message to start chatting with this agent.")
+                                    .padding(.top, 40)
+                            } else {
+                                ForEach(agentMessages) { msg in
+                                    agentChatBubble(msg)
+                                        .id(msg.id)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 100)
+                    }
+                    .onChange(of: agentMessages.last?.id) { lastId in
+                        if let lastId { withAnimation { proxy.scrollTo(lastId, anchor: .bottom) } }
+                    }
+                    .onAppear {
+                        if let lastId = agentMessages.last?.id {
+                            proxy.scrollTo(lastId, anchor: .bottom)
+                        }
+                    }
+                }
+                agentInputBar(agent)
+            }
+        }
+        .navigationTitle(agent.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    selectedPersistentAgent = nil
+                } label: {
+                    Image(systemName: "chevron.left")
+                    Text("Agents")
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await loadAgentMessages(agent) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+    }
+
+    private func agentChatBubble(_ msg: PersistentAgentMessage) -> some View {
+        let isUser = msg.role == "user"
+        return HStack(alignment: .top, spacing: 10) {
+            if isUser { Spacer(minLength: 40) }
+            VStack(alignment: .leading, spacing: 8) {
+                MarkdownText(text: msg.content, textColor: isUser ? .white : HermesMobileStyle.text)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                isUser ? HermesMobileStyle.blue : .white,
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isUser ? Color.clear : HermesMobileStyle.border, lineWidth: 1)
+            )
+            if !isUser { Spacer(minLength: 40) }
+        }
+    }
+
+    private func agentInputBar(_ agent: PersistentAgent) -> some View {
+        HStack(spacing: 10) {
+            TextField("Message \(agent.name)…", text: $agentInputDraft, axis: .vertical)
+                .font(.system(size: 15))
+                .textInputAutocapitalization(.sentences)
+                .lineLimit(1...4)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+            Button {
+                Task { await sendAgentMsg(agent) }
+            } label: {
+                if isSendingAgentMessage {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(width: 38, height: 38)
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                }
+            }
+            .background(!agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: Circle())
+            .disabled(agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingAgentMessage)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.94))
+        .overlay(Rectangle().fill(HermesMobileStyle.border).frame(height: 1), alignment: .top)
+    }
+
+    private var commandBar: some View {
+        Button {
+            newAgentName = ""
+            newAgentDesc = ""
+            isShowingCreateAgent = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
                     .font(.system(size: 20, weight: .light))
-                    .foregroundStyle(HermesMobileStyle.muted)
-                Text("Start with a goal")
+                    .foregroundStyle(HermesMobileStyle.blue)
+                Text("Start with an agent")
                     .font(.system(size: 16))
                     .foregroundStyle(HermesMobileStyle.muted)
                 Spacer()
-                Text("Glm 5.2 · Med")
-                    .font(.system(size: 13))
-                    .foregroundStyle(HermesMobileStyle.muted)
                 Circle()
-                    .fill(HermesMobileStyle.text)
+                    .fill(HermesMobileStyle.blue)
                     .frame(width: 40, height: 40)
                     .overlay(Image(systemName: "arrow.up").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white))
             }
@@ -980,16 +1260,98 @@ struct ContentView: View {
     private func loadHome() async {
         isLoadingAgents = true
         isLoadingSessions = true
+        isLoadingAgents2 = true
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             nodeName = try await client.status().nodeName
             agents = try await client.agents(deviceToken: deviceToken)
             sessions = try await client.sessions(deviceToken: deviceToken)
+            persistentAgents = try await client.persistentAgents(deviceToken: deviceToken)
+        } catch MobileGatewayError.badStatus(401) {
+            statusMessage = "Reconnecting..."
+            await reconnect()
+            isLoadingAgents = false
+            isLoadingSessions = false
+            isLoadingAgents2 = false
+            return
         } catch {
             statusMessage = error.localizedDescription
         }
         isLoadingAgents = false
         isLoadingSessions = false
+        isLoadingAgents2 = false
+    }
+
+    private func reconnect() async {
+        do {
+            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let pairing = try await client.startPairing()
+            let completed = try await client.completePairing(code: pairing.code, deviceName: deviceName.isEmpty ? UIDevice.current.name : deviceName, platform: "ios")
+            deviceId = completed.deviceId
+            deviceToken = completed.deviceToken
+            nodeName = try await client.status().nodeName
+            agents = try await client.agents(deviceToken: deviceToken)
+            sessions = try await client.sessions(deviceToken: deviceToken)
+            persistentAgents = try await client.persistentAgents(deviceToken: deviceToken)
+            statusMessage = "Reconnected to \(nodeName)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    private func createAgent() async {
+        let name = newAgentName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        isLoadingAgents2 = true
+        do {
+            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let agent = try await client.createPersistentAgent(name: name, description: newAgentDesc, deviceToken: deviceToken)
+            persistentAgents.insert(agent, at: 0)
+            newAgentName = ""
+            newAgentDesc = ""
+            statusMessage = "Created \(agent.name)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+        isLoadingAgents2 = false
+    }
+
+    private func deleteAgent(_ agent: PersistentAgent) async {
+        do {
+            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            try await client.deletePersistentAgent(id: agent.id, deviceToken: deviceToken)
+            persistentAgents.removeAll { $0.id == agent.id }
+            statusMessage = "Deleted \(agent.name)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    private func loadAgentMessages(_ agent: PersistentAgent) async {
+        isLoadingAgentMessages = true
+        do {
+            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            agentMessages = try await client.agentMessages(agentId: agent.id, deviceToken: deviceToken)
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+        isLoadingAgentMessages = false
+    }
+
+    private func sendAgentMsg(_ agent: PersistentAgent) async {
+        let text = agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        isSendingAgentMessage = true
+        do {
+            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let response = try await client.sendAgentMessage(agentId: agent.id, content: text, deviceToken: deviceToken)
+            agentMessages.append(response.userMessage)
+            agentMessages.append(response.assistantMessage)
+            agentInputDraft = ""
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+        isSendingAgentMessage = false
     }
 
     private func addAgent() async {

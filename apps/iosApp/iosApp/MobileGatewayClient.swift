@@ -82,6 +82,38 @@ struct GoalResponse: Decodable {
     let timeline: SessionTimeline
 }
 
+struct PersistentAgent: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let description: String
+    let capabilities: [String]
+    let linkedSessionIds: [String]
+    let createdAt: String
+    let updatedAt: String
+    let lastMessageAt: String?
+}
+
+struct PersistentAgentsResponse: Decodable {
+    let agents: [PersistentAgent]
+}
+
+struct PersistentAgentMessage: Decodable, Identifiable {
+    let id: String
+    let agentId: String
+    let role: String
+    let content: String
+    let createdAt: String
+}
+
+struct AgentMessagesResponse: Decodable {
+    let messages: [PersistentAgentMessage]
+}
+
+struct AgentMessageResponse: Decodable {
+    let userMessage: PersistentAgentMessage
+    let assistantMessage: PersistentAgentMessage
+}
+
 enum MobileGatewayError: Error, LocalizedError {
     case invalidURL
     case badStatus(Int)
@@ -183,6 +215,35 @@ final class MobileGatewayClient {
         return try await post("/mobile/v1/sessions/\(sessionId)/goals", body: GoalBody(goal: text), token: deviceToken)
     }
 
+    func persistentAgents(deviceToken: String) async throws -> [PersistentAgent] {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        let response: PersistentAgentsResponse = try await get("/mobile/v1/agents/persistent", token: deviceToken)
+        return response.agents
+    }
+
+    func createPersistentAgent(name: String, description: String, deviceToken: String) async throws -> PersistentAgent {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        return try await post("/mobile/v1/agents/persistent", body: AgentCreateBody(name: name, description: description), token: deviceToken)
+    }
+
+    func deletePersistentAgent(id: String, deviceToken: String) async throws {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        var request = try request(path: "/mobile/v1/agents/persistent/\(id)", method: "DELETE")
+        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
+        try await sendEmpty(request)
+    }
+
+    func agentMessages(agentId: String, deviceToken: String) async throws -> [PersistentAgentMessage] {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        let response: AgentMessagesResponse = try await get("/mobile/v1/agents/persistent/\(agentId)/messages", token: deviceToken)
+        return response.messages
+    }
+
+    func sendAgentMessage(agentId: String, content: String, deviceToken: String) async throws -> AgentMessageResponse {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        return try await post("/mobile/v1/agents/persistent/\(agentId)/messages", body: AgentMessageBody(content: content), token: deviceToken)
+    }
+
     private func get<T: Decodable>(_ path: String, token: String? = nil) async throws -> T {
         var request = try request(path: path, method: "GET")
         if let token {
@@ -244,4 +305,13 @@ private struct GoalBody: Encodable {
 private struct AgentBody: Encodable {
     let name: String
     let baseUrl: String
+}
+
+private struct AgentCreateBody: Encodable {
+    let name: String
+    let description: String
+}
+
+private struct AgentMessageBody: Encodable {
+    let content: String
 }

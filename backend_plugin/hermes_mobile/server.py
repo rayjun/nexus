@@ -11,7 +11,7 @@ from typing import Optional, Protocol
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket
 
 from .live_approvals import LiveApprovalMobileStore
-from .models import AgentInfo, AgentRequest, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, DevicesResponse, GoalRequest, GoalResponse, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, SessionSummary, SessionTimeline, StatusResponse
+from .models import AgentInfo, AgentRequest, AgentMessageRequest, AgentMessageResponse, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, DevicesResponse, GoalRequest, GoalResponse, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, PersistentAgent, PersistentAgentCreate, PersistentAgentMessage, PersistentAgentsResponse, SessionSummary, SessionTimeline, StatusResponse
 from .real_store import StateDbMobileStore
 from .storage import MockMobileStore
 
@@ -26,6 +26,12 @@ class MobileStore(Protocol):
     def list_agents(self) -> list[AgentInfo]: ...
     def add_agent(self, request: AgentRequest) -> AgentInfo: ...
     def remove_agent(self, agent_id: str) -> bool: ...
+    def list_persistent_agents(self) -> list["PersistentAgent"]: ...
+    def create_persistent_agent(self, name: str, description: str = "") -> "PersistentAgent": ...
+    def delete_persistent_agent(self, agent_id: str) -> bool: ...
+    def get_agent_messages(self, agent_id: str) -> list["PersistentAgentMessage"]: ...
+    def send_agent_message(self, agent_id: str, content: str) -> tuple["PersistentAgentMessage", "PersistentAgentMessage"]: ...
+    def link_session_to_agent(self, agent_id: str, session_id: str) -> "PersistentAgent | None": ...
     def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None: ...
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]: ...
     def list_artifacts(self, limit: int = 50) -> list[Artifact]: ...
@@ -160,6 +166,51 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
         if not store.remove_agent(agent_id):
             raise HTTPException(status_code=404, detail="agent_not_found")
         return Response(status_code=204)
+
+    @app.get("/mobile/v1/agents/persistent", response_model=PersistentAgentsResponse)
+    def list_persistent_agents(device_id: str = Depends(require_device)) -> PersistentAgentsResponse:
+        if hasattr(store, "list_persistent_agents"):
+            return PersistentAgentsResponse(agents=store.list_persistent_agents())
+        return PersistentAgentsResponse(agents=[])
+
+    @app.post("/mobile/v1/agents/persistent", response_model=PersistentAgent)
+    def create_persistent_agent(request: PersistentAgentCreate, device_id: str = Depends(require_device)) -> PersistentAgent:
+        if hasattr(store, "create_persistent_agent"):
+            return store.create_persistent_agent(request.name, request.description)
+        raise HTTPException(status_code=501, detail="not_supported")
+
+    @app.delete("/mobile/v1/agents/persistent/{agent_id}", status_code=204)
+    def delete_persistent_agent(agent_id: str, device_id: str = Depends(require_device)) -> Response:
+        if hasattr(store, "delete_persistent_agent"):
+            if not store.delete_persistent_agent(agent_id):
+                raise HTTPException(status_code=404, detail="agent_not_found")
+            return Response(status_code=204)
+        raise HTTPException(status_code=501, detail="not_supported")
+
+    @app.get("/mobile/v1/agents/persistent/{agent_id}/messages")
+    def list_agent_messages(agent_id: str, device_id: str = Depends(require_device)) -> dict[str, object]:
+        if hasattr(store, "get_agent_messages"):
+            return {"messages": store.get_agent_messages(agent_id)}
+        return {"messages": []}
+
+    @app.post("/mobile/v1/agents/persistent/{agent_id}/messages", response_model=AgentMessageResponse)
+    def send_agent_message(agent_id: str, request: AgentMessageRequest, device_id: str = Depends(require_device)) -> AgentMessageResponse:
+        if hasattr(store, "send_agent_message"):
+            try:
+                user_msg, assistant_msg = store.send_agent_message(agent_id, request.content)
+                return AgentMessageResponse(user_message=user_msg, assistant_message=assistant_msg)
+            except ValueError:
+                raise HTTPException(status_code=404, detail="agent_not_found") from None
+        raise HTTPException(status_code=501, detail="not_supported")
+
+    @app.post("/mobile/v1/agents/persistent/{agent_id}/link/{session_id}", response_model=PersistentAgent)
+    def link_session(agent_id: str, session_id: str, device_id: str = Depends(require_device)) -> PersistentAgent:
+        if hasattr(store, "link_session_to_agent"):
+            result = store.link_session_to_agent(agent_id, session_id)
+            if not result:
+                raise HTTPException(status_code=404, detail="agent_not_found")
+            return result
+        raise HTTPException(status_code=501, detail="not_supported")
 
     @app.get("/mobile/v1/approvals")
     def list_approvals(status: str | None = Query(default=None), device_id: str = Depends(require_device)) -> dict[str, object]:
