@@ -679,6 +679,20 @@ struct ContentView: View {
                         }
                     }
                 }
+                if isSendingAgentMessage {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text("Replying…")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(HermesMobileStyle.line.opacity(0.2))
+                    .overlay(Rectangle().fill(HermesMobileStyle.border).frame(height: 1), alignment: .bottom)
+                }
                 agentInputBar(agent)
             }
         }
