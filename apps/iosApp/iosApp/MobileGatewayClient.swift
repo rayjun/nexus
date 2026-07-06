@@ -241,7 +241,7 @@ final class MobileGatewayClient {
 
     func sendAgentMessage(agentId: String, content: String, deviceToken: String) async throws -> AgentMessageResponse {
         if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        return try await post("/mobile/v1/agents/persistent/\(agentId)/messages", body: AgentMessageBody(content: content), token: deviceToken)
+        return try await post("/mobile/v1/agents/persistent/\(agentId)/messages", body: AgentMessageBody(content: content), token: deviceToken, timeout: 180)
     }
 
     private func get<T: Decodable>(_ path: String, token: String? = nil) async throws -> T {
@@ -252,8 +252,8 @@ final class MobileGatewayClient {
         return try await send(request)
     }
 
-    private func post<T: Decodable, Body: Encodable>(_ path: String, body: Body, token: String? = nil) async throws -> T {
-        var request = try request(path: path, method: "POST")
+    private func post<T: Decodable, Body: Encodable>(_ path: String, body: Body, token: String? = nil, timeout: TimeInterval = 10) async throws -> T {
+        var request = try request(path: path, method: "POST", timeout: timeout)
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -262,13 +262,13 @@ final class MobileGatewayClient {
         return try await send(request)
     }
 
-    private func request(path: String, method: String) throws -> URLRequest {
+    private func request(path: String, method: String, timeout: TimeInterval = 10) throws -> URLRequest {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw MobileGatewayError.invalidURL
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = 10
+        request.timeoutInterval = timeout
         return request
     }
 
