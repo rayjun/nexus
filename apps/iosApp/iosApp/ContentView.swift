@@ -1343,6 +1343,14 @@ struct ContentView: View {
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             agentMessages = try await client.agentMessages(agentId: agent.id, deviceToken: deviceToken)
+        } catch MobileGatewayError.badStatus(401) {
+            await reconnect()
+            do {
+                let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+                agentMessages = try await client.agentMessages(agentId: agent.id, deviceToken: deviceToken)
+            } catch {
+                statusMessage = error.localizedDescription
+            }
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -1359,6 +1367,17 @@ struct ContentView: View {
             agentMessages.append(response.userMessage)
             agentMessages.append(response.assistantMessage)
             agentInputDraft = ""
+        } catch MobileGatewayError.badStatus(401) {
+            await reconnect()
+            do {
+                let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+                let response = try await client.sendAgentMessage(agentId: agent.id, content: text, deviceToken: deviceToken)
+                agentMessages.append(response.userMessage)
+                agentMessages.append(response.assistantMessage)
+                agentInputDraft = ""
+            } catch {
+                statusMessage = error.localizedDescription
+            }
         } catch {
             statusMessage = error.localizedDescription
         }
