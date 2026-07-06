@@ -7,6 +7,8 @@ from pathlib import Path
 from secrets import randbelow, token_urlsafe
 from typing import Any
 
+import httpx
+
 from .models import AgentInfo, AgentRequest, AgentMessageRequest, AgentMessageResponse, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, PersistentAgent, PersistentAgentCreate, PersistentAgentMessage, PersistentAgentsResponse, SessionSummary, SessionTimeline, StatusResponse, TimelineItem, ToolCall, expires_in
 
 
@@ -232,26 +234,78 @@ class StateDbMobileStore:
         user_msg_id = f"msg_{token_urlsafe(8)}"
         assistant_msg_id = f"msg_{token_urlsafe(8)}"
         with self._connect() as con:
-            row = con.execute("SELECT id FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
+            row = con.execute("SELECT id, name, description FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
             if not row:
                 raise ValueError("agent_not_found")
+            agent_name = row["name"]
+            agent_desc = row["description"] or ""
             con.execute(
                 "INSERT INTO mobile_agent_messages (id, agent_id, role, content, created_at) VALUES (?, ?, 'user', ?, ?)",
                 (user_msg_id, agent_id, content, now_ts),
             )
-            assistant_content = f"Agent received your message. This is a placeholder response — real agent runtime integration is pending."
+            con.commit()
+
+        history = self.get_agent_messages(agent_id)
+        assistant_content = self._call_llm(agent_name, agent_desc, history)
+
+        now2 = datetime.now(UTC)
+        with self._connect() as con:
             con.execute(
                 "INSERT INTO mobile_agent_messages (id, agent_id, role, content, created_at) VALUES (?, ?, 'assistant', ?, ?)",
-                (assistant_msg_id, agent_id, assistant_content, now_ts + 0.1),
+                (assistant_msg_id, agent_id, assistant_content, now2.timestamp()),
             )
             con.execute(
                 "UPDATE mobile_agents SET last_message_at = ?, updated_at = ? WHERE id = ?",
-                (now_ts, now_ts, agent_id),
+                (now2.timestamp(), now2.timestamp(), agent_id),
             )
             con.commit()
         user_msg = PersistentAgentMessage(id=user_msg_id, agent_id=agent_id, role="user", content=content, created_at=now)
-        assistant_msg = PersistentAgentMessage(id=assistant_msg_id, agent_id=agent_id, role="assistant", content=assistant_content, created_at=now)
+        assistant_msg = PersistentAgentMessage(id=assistant_msg_id, agent_id=agent_id, role="assistant", content=assistant_content, created_at=now2)
         return user_msg, assistant_msg
+
+    def _call_llm(self, agent_name: str, agent_desc: str, history: list[PersistentAgentMessage]) -> str:
+        env_path = Path.home() / ".hermes" / ".env"
+        api_key = ""
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                if line.startswith("OLLAMA_API_KEY=") and not line.startswith("#"):
+                    api_key = line.split("=", 1)[1].strip()
+                    break
+
+        config_path = Path.home() / ".hermes" / "config.yaml"
+        base_url = "https://ollama.com/v1"
+        model = "glm-5.2"
+        if config_path.exists():
+            try:
+                import yaml
+                cfg = yaml.safe_load(config_path.read_text())
+                m = cfg.get("model", {})
+                base_url = m.get("base_url", base_url)
+                model = m.get("default", model)
+            except Exception:
+                pass
+
+        system_prompt = f"You are {agent_name}, a helpful AI assistant."
+        if agent_desc:
+            system_prompt += f" Your role: {agent_desc}"
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in history:
+            messages.append({"role": msg.role, "content": msg.content})
+
+        try:
+            resp = httpx.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": model, "messages": messages, "max_tokens": 2000, "stream": False},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"]
+            return content.strip() or "I have no response."
+        except Exception as e:
+            return f"[Error: unable to get response from LLM: {e}]"
 
     def link_session_to_agent(self, agent_id: str, session_id: str) -> PersistentAgent | None:
         self._ensure_agent_tables()
