@@ -85,7 +85,7 @@ struct ContentView: View {
     private var connectView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                mobileTopBar(title: "Hermes Mobile", subtitle: "Gateway Control Surface")
+                mobileTopBar(title: "Nexus", subtitle: "Agent Control Surface")
 
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 10) {
@@ -191,7 +191,7 @@ struct ContentView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(spacing: 10) {
-                    Text("Hermes")
+                    Text("Nexus")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(HermesMobileStyle.text)
                     Spacer()

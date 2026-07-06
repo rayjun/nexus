@@ -260,26 +260,26 @@
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Hermes Mobile";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 0.1.0;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-framework",
-					shared,
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.hermes.mobile.ios;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
+				INFOPLIST_KEY_CFBundleDisplayName = "Nexus";
+							INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+							INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+							INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+							IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+							MARKETING_VERSION = 0.1.0;
+							OTHER_LDFLAGS = (
+								"$(inherited)",
+								"-framework",
+								shared,
+							);
+							PRODUCT_BUNDLE_IDENTIFIER = com.rayjun.nexus;
+							PRODUCT_NAME = "$(TARGET_NAME)";
+							SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+							SUPPORTS_MACCATALYST = NO;
+							SWIFT_EMIT_LOC_STRINGS = YES;
+							SWIFT_VERSION = 5.0;
+							TARGETED_DEVICE_FAMILY = "1,2";
+						};
+						name = Debug;
 		};
 		A10000000000000000000082 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -294,7 +294,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Hermes Mobile";
+				INFOPLIST_KEY_CFBundleDisplayName = "Nexus";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -305,7 +305,7 @@
 					"-framework",
 					shared,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.hermes.mobile.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rayjun.nexus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
