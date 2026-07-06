@@ -332,7 +332,7 @@ struct ContentView: View {
     private var segmentedRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(["Inbox", "Sessions", "Agents", "Automations", "Artifacts"], id: \.self) { item in
+                ForEach(["Inbox", "Agents", "Sessions", "Automations", "Artifacts"], id: \.self) { item in
                     Button {
                         selectedSection = item
                     } label: {
