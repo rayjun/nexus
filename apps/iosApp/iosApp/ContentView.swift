@@ -55,6 +55,7 @@ struct ContentView: View {
                 }
             }
         }
+        .preferredColorScheme(.light)
         .onAppear {
             gatewayInput = gatewayBaseUrl
             if isConnected {
