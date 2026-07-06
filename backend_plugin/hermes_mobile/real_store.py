@@ -271,43 +271,46 @@ class StateDbMobileStore:
         return user_msg, assistant_msg
 
     def _call_hermes(self, agent_id: str, agent_name: str, agent_desc: str, content: str) -> tuple[str, str | None]:
-        import subprocess
+        import httpx
 
         with self._connect() as con:
             row = con.execute("SELECT linked_session_ids FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
             session_ids: list[str] = json.loads(row["linked_session_ids"] or "[]") if row else []
 
-        resume_id = session_ids[-1] if session_ids else None
+        hermes_session_id = session_ids[-1] if session_ids else f"mobile-agent-{agent_id}"
 
-        cmd = ["hermes"]
-        if resume_id:
-            cmd += ["--resume", resume_id]
-        cmd += ["chat", "-q", content, "-Q", "--pass-session-id"]
+        api_key = ""
+        env_path = Path.home() / ".hermes" / ".env"
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                if line.startswith("API_SERVER_KEY=") and not line.startswith("#"):
+                    api_key = line.split("=", 1)[1].strip()
+                    break
 
-        system_hint = f"You are {agent_name}, a helpful AI assistant."
-        if agent_desc:
-            system_hint += f" Your role: {agent_desc}"
+        if not api_key:
+            api_key = "hermes-mobile-local"
+
+        url = "http://127.0.0.1:8642/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "X-Hermes-Session-Id": hermes_session_id,
+        }
+        body = {
+            "model": "hermes-agent",
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": 2000,
+            "stream": False,
+        }
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-            combined = (result.stdout + result.stderr).strip()
-            lines = combined.split("\n")
-            session_id = None
-            response_lines: list[str] = []
-            for line in lines:
-                if line.startswith("session_id:"):
-                    session_id = line.split(":", 1)[1].strip()
-                elif line.startswith("↻"):
-                    continue
-                elif line.strip():
-                    response_lines.append(line)
-            response = "\n".join(response_lines).strip()
-            if not response:
-                if result.stderr:
-                    response = f"[Error: {result.stderr.strip()[:200]}]"
-                else:
-                    response = "[No response from Hermes]"
-            return response, session_id
+            resp = httpx.post(url, headers=headers, json=body, timeout=120)
+            resp.raise_for_status()
+            data = resp.json()
+            assistant_content = data["choices"][0]["message"]["content"].strip()
+            if not assistant_content:
+                assistant_content = "[No response from Hermes]"
+            return assistant_content, hermes_session_id
         except Exception as e:
             return f"[Error: unable to call Hermes: {e}]", None
 
