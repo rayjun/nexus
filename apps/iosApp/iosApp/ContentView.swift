@@ -570,6 +570,7 @@ struct ContentView: View {
                         .foregroundStyle(HermesMobileStyle.blue)
                         TextField("What does this agent do?", text: $newAgentDesc, axis: .vertical)
                             .font(.system(size: 15))
+                            .foregroundStyle(HermesMobileStyle.text)
                             .textInputAutocapitalization(.sentences)
                             .lineLimit(1...3)
                             .padding(.horizontal, 12)
@@ -720,6 +721,7 @@ struct ContentView: View {
         HStack(spacing: 10) {
             TextField("Message \(agent.name)…", text: $agentInputDraft, axis: .vertical)
                 .font(.system(size: 15))
+                .foregroundStyle(HermesMobileStyle.text)
                 .textInputAutocapitalization(.sentences)
                 .lineLimit(1...4)
                 .padding(.horizontal, 12)
@@ -920,6 +922,7 @@ struct ContentView: View {
         HStack(spacing: 10) {
             TextField("Continue this session…", text: $followUpDraft, axis: .vertical)
                 .font(.system(size: 15))
+                .foregroundStyle(HermesMobileStyle.text)
                 .textInputAutocapitalization(.sentences)
                 .lineLimit(1...4)
                 .padding(.horizontal, 12)
@@ -1091,6 +1094,7 @@ struct ContentView: View {
             .foregroundStyle(HermesMobileStyle.blue)
             TextField(placeholder, text: text)
                 .font(.system(size: 15))
+                .foregroundStyle(HermesMobileStyle.text)
                 .textInputAutocapitalization(.never)
                 .padding(.horizontal, 12)
                 .frame(height: 44)
