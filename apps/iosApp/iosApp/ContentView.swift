@@ -749,7 +749,7 @@ struct ContentView: View {
                         .frame(width: 38, height: 38)
                 }
             }
-            .background(!agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: Circle())
+            .background(!agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSendingAgentMessage ? HermesMobileStyle.subtleText : HermesMobileStyle.blue, in: Circle())
             .disabled(agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingAgentMessage)
         }
         .padding(.horizontal, 14)
@@ -1361,20 +1361,38 @@ struct ContentView: View {
         let text = agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         isSendingAgentMessage = true
+        agentInputDraft = ""
+
+        let now = ISO8601DateFormatter().string(from: Date())
+        let localUserMsg = PersistentAgentMessage(
+            id: "local_\(UUID().uuidString.prefix(8))",
+            agentId: agent.id,
+            role: "user",
+            content: text,
+            createdAt: now
+        )
+        agentMessages.append(localUserMsg)
+
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             let response = try await client.sendAgentMessage(agentId: agent.id, content: text, deviceToken: deviceToken)
-            agentMessages.append(response.userMessage)
+            if let idx = agentMessages.firstIndex(where: { $0.id == localUserMsg.id }) {
+                agentMessages[idx] = response.userMessage
+            } else {
+                agentMessages.append(response.userMessage)
+            }
             agentMessages.append(response.assistantMessage)
-            agentInputDraft = ""
         } catch MobileGatewayError.badStatus(401) {
             await reconnect()
             do {
                 let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
                 let response = try await client.sendAgentMessage(agentId: agent.id, content: text, deviceToken: deviceToken)
-                agentMessages.append(response.userMessage)
+                if let idx = agentMessages.firstIndex(where: { $0.id == localUserMsg.id }) {
+                    agentMessages[idx] = response.userMessage
+                } else {
+                    agentMessages.append(response.userMessage)
+                }
                 agentMessages.append(response.assistantMessage)
-                agentInputDraft = ""
             } catch {
                 statusMessage = error.localizedDescription
             }
