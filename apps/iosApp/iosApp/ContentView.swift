@@ -785,7 +785,7 @@ struct ContentView: View {
                         .frame(width: 38, height: 38)
                 }
             }
-            .background(!agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSendingAgentMessage ? HermesMobileStyle.subtleText : HermesMobileStyle.blue, in: Circle())
+            .background(!agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSendingAgentMessage ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: Circle())
             .disabled(agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingAgentMessage)
         }
         .padding(.horizontal, 14)
@@ -986,7 +986,7 @@ struct ContentView: View {
                         .frame(width: 38, height: 38)
                 }
             }
-            .background(canAppendGoal ? HermesMobileStyle.text : HermesMobileStyle.subtleText, in: Circle())
+            .background(canAppendGoal ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: Circle())
             .disabled(!canAppendGoal || isAppendingGoal)
         }
         .padding(.horizontal, 14)
