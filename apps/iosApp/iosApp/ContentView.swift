@@ -1669,13 +1669,8 @@ private struct MarkdownText: View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
-                case .codeBlock(let code):
-                    Text(code)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(textColor)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                case .codeBlock(let lang, let code):
+                    CodeBlockView(code: code, language: lang, textColor: textColor)
                 case .heading(let level, let content):
                     Text(inlineAttributed(content))
                         .font(.system(size: level == 1 ? 20 : (level == 2 ? 17 : 15), weight: .bold))
@@ -1699,7 +1694,7 @@ private struct MarkdownText: View {
     }
 
     private enum Block {
-        case codeBlock(String)
+        case codeBlock(String, String)
         case heading(Int, String)
         case paragraph(String)
         case bullet(String)
@@ -1712,6 +1707,7 @@ private struct MarkdownText: View {
         while i < lines.count {
             let line = lines[i]
             if line.hasPrefix("```") {
+                let lang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                 var codeLines: [String] = []
                 i += 1
                 while i < lines.count && !lines[i].hasPrefix("```") {
@@ -1719,7 +1715,7 @@ private struct MarkdownText: View {
                     i += 1
                 }
                 if i < lines.count { i += 1 }
-                result.append(.codeBlock(codeLines.joined(separator: "\n")))
+                result.append(.codeBlock(lang, codeLines.joined(separator: "\n")))
             } else if line.hasPrefix("### ") {
                 result.append(.heading(3, String(line.dropFirst(4))))
                 i += 1
@@ -1787,6 +1783,140 @@ private struct MarkdownText: View {
             }
         }
         return result
+    }
+}
+
+private struct CodeBlockView: View {
+    let code: String
+    let language: String
+    let textColor: Color
+
+    private static let keywords: Set<String> = [
+        "func", "let", "var", "if", "else", "for", "while", "return", "struct",
+        "class", "enum", "import", "guard", "switch", "case", "break", "continue",
+        "defer", "in", "where", "try", "catch", "throw", "throws", "async", "await",
+        "public", "private", "internal", "static", "self", "init", "deinit",
+        "true", "false", "nil", "some", "any", "extension", "protocol", "override",
+        "final", "open", "weak", "unowned", "inout", "mutating", "nonmutating",
+        "const", "def", "print", "lambda", "with", "as", "pass", "None", "True",
+        "False", "from", "yield", "raise", "except", "finally", "elif", "global",
+        "fn", "pub", "use", "mod", "impl", "trait", "match", "loop", "unsafe",
+        "int", "string", "bool", "float", "double", "void", "char", "long",
+        "short", "unsigned", "signed", "sizeof", "typedef", "namespace",
+        "template", "virtual", "new", "delete", "this", "nullptr",
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !language.isEmpty {
+                Text(language.uppercased())
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(1.5)
+                    .foregroundStyle(Color(red: 0.5, green: 0.55, blue: 0.65))
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+            }
+            Text(highlightedCode)
+                .font(.system(size: 12, design: .monospaced))
+                .lineSpacing(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+        }
+        .background(Color(red: 0.12, green: 0.13, blue: 0.17), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var highlightedCode: AttributedString {
+        var result = AttributedString()
+        let lines = code.components(separatedBy: "\n")
+        for (idx, line) in lines.enumerated() {
+            result.append(highlightLine(line))
+            if idx < lines.count - 1 {
+                result.append(AttributedString("\n"))
+            }
+        }
+        return result
+    }
+
+    private func highlightLine(_ line: String) -> AttributedString {
+        var result = AttributedString()
+        var remaining = line
+
+        while !remaining.isEmpty {
+            if remaining.hasPrefix("//") {
+                var comment = AttributedString(remaining)
+                comment.foregroundColor = Color(red: 0.42, green: 0.45, blue: 0.52)
+                result.append(comment)
+                break
+            }
+
+            if remaining.hasPrefix("#") && (language.isEmpty || language == "python" || language == "bash" || language == "sh") {
+                var comment = AttributedString(remaining)
+                comment.foregroundColor = Color(red: 0.42, green: 0.45, blue: 0.52)
+                result.append(comment)
+                break
+            }
+
+            if remaining.hasPrefix("\"") {
+                if let endIdx = remaining.dropFirst().firstIndex(of: "\"") {
+                    let str = String(remaining[...endIdx])
+                    var attr = AttributedString(str)
+                    attr.foregroundColor = Color(red: 0.78, green: 0.87, blue: 0.55)
+                    result.append(attr)
+                    remaining = String(remaining[remaining.index(after: endIdx)...])
+                    continue
+                }
+            }
+
+            var wordEnd = remaining.startIndex
+            while wordEnd < remaining.endIndex && remaining[wordEnd].isLetter || remaining[wordEnd] == "_" || remaining[wordEnd].isNumber {
+                wordEnd = remaining.index(after: wordEnd)
+            }
+
+            if wordEnd == remaining.startIndex {
+                var attr = AttributedString(String(remaining.first!))
+                attr.foregroundColor = Color(red: 0.85, green: 0.87, blue: 0.92)
+                result.append(attr)
+                remaining = String(remaining.dropFirst())
+                continue
+            }
+
+            let word = String(remaining[..<wordEnd])
+
+            if Self.keywords.contains(word) {
+                var attr = AttributedString(word)
+                attr.foregroundColor = Color(red: 0.55, green: 0.78, blue: 0.95)
+                attr.font = .system(size: 12, design: .monospaced).bold()
+                result.append(attr)
+            } else if word.allSatisfy({ $0.isNumber }) {
+                var attr = AttributedString(word)
+                attr.foregroundColor = Color(red: 0.92, green: 0.72, blue: 0.55)
+                result.append(attr)
+            } else if word.first?.isUppercase == true {
+                var attr = AttributedString(word)
+                attr.foregroundColor = Color(red: 0.88, green: 0.76, blue: 0.62)
+                result.append(attr)
+            } else {
+                var attr = AttributedString(word)
+                attr.foregroundColor = Color(red: 0.85, green: 0.87, blue: 0.92)
+                result.append(attr)
+            }
+
+            remaining = String(remaining[wordEnd...])
+        }
+
+        return result
+    }
+}
+
+private struct MarkdownText_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack {
+            MarkdownText(text: "Hello `world` and **bold**", textColor: .black)
+            MarkdownText(text: "```swift\nfunc hello() {\n  print(\"hi\")\n}\n```", textColor: .black)
+        }
+        .padding()
+        .background(Color(red: 0.965, green: 0.976, blue: 0.992))
     }
 }
 
