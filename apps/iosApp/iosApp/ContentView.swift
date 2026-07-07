@@ -1869,7 +1869,7 @@ private struct CodeBlockView: View {
             }
 
             var wordEnd = remaining.startIndex
-            while wordEnd < remaining.endIndex && remaining[wordEnd].isLetter || remaining[wordEnd] == "_" || remaining[wordEnd].isNumber {
+            while wordEnd < remaining.endIndex, remaining[wordEnd].isLetter || remaining[wordEnd] == "_" || remaining[wordEnd].isNumber {
                 wordEnd = remaining.index(after: wordEnd)
             }
 
