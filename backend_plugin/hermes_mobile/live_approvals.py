@@ -157,6 +157,11 @@ class LiveApprovalMobileStore:
     def add_agent(self, request: AgentRequest) -> AgentInfo:
         return self.base_store.add_agent(request)
 
+    def update_agent(self, agent_id: str, request: AgentRequest) -> AgentInfo | None:
+        if hasattr(self.base_store, "update_agent"):
+            return self.base_store.update_agent(agent_id, request)
+        return None
+
     def get_status(self):
         if hasattr(self.base_store, "get_status"):
             return self.base_store.get_status()

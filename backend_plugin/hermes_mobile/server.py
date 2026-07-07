@@ -25,6 +25,7 @@ class MobileStore(Protocol):
     def revoke_device(self, device_id: str) -> bool: ...
     def list_agents(self) -> list[AgentInfo]: ...
     def add_agent(self, request: AgentRequest) -> AgentInfo: ...
+    def update_agent(self, agent_id: str, request: AgentRequest) -> AgentInfo | None: ...
     def get_status(self) -> "StatusResponse | None": ...
     def remove_agent(self, agent_id: str) -> bool: ...
     def list_persistent_agents(self) -> list["PersistentAgent"]: ...
@@ -164,6 +165,15 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
     @app.post("/mobile/v1/agents", response_model=AgentInfo)
     def add_agent(request: AgentRequest, device_id: str = Depends(require_device)) -> AgentInfo:
         return store.add_agent(request)
+
+    @app.put("/mobile/v1/agents/{agent_id}", response_model=AgentInfo)
+    def update_agent(agent_id: str, request: AgentRequest, device_id: str = Depends(require_device)) -> AgentInfo:
+        if hasattr(store, "update_agent"):
+            updated = store.update_agent(agent_id, request)
+            if not updated:
+                raise HTTPException(status_code=404, detail="agent_not_found")
+            return updated
+        raise HTTPException(status_code=501, detail="not_supported")
 
     @app.delete("/mobile/v1/agents/{agent_id}", status_code=204)
     def remove_agent(agent_id: str, device_id: str = Depends(require_device)) -> Response:

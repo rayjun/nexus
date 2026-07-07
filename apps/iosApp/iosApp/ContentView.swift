@@ -39,6 +39,9 @@ struct ContentView: View {
     @State private var isShowingCreateAgent = false
     @State private var newAgentName = ""
     @State private var newAgentDesc = ""
+    @State private var isShowingEditServer = false
+    @State private var editServerName = ""
+    @State private var editServerUrl = ""
     @State private var cronJobs: [CronJobInfo] = []
     @State private var approvalList: [ApprovalInfo] = []
     @State private var artifactList: [ArtifactInfo] = []
@@ -180,7 +183,11 @@ struct ContentView: View {
                         .foregroundStyle(HermesMobileStyle.blue)
                     }
                     .buttonStyle(.plain)
-                    mobileTopBar(title: agent.name, subtitle: agent.baseUrl)
+                    mobileTopBar(title: agent.name, subtitle: agent.baseUrl) {
+                        editServerName = agent.name
+                        editServerUrl = agent.baseUrl
+                        isShowingEditServer = true
+                    }
                     statusStrip
                     segmentedRail
                     contentPanel
@@ -278,6 +285,9 @@ struct ContentView: View {
         .sheet(isPresented: $isShowingAddServer) {
             addServerSheet
         }
+        .sheet(isPresented: $isShowingEditServer) {
+            editServerSheet
+        }
     }
 
     private var addServerSheet: some View {
@@ -318,6 +328,51 @@ struct ContentView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         isShowingAddServer = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var editServerSheet: some View {
+        NavigationStack {
+            ZStack {
+                HermesMobileStyle.background.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 16) {
+                    desktopField(title: "SERVER NAME", text: $editServerName, placeholder: "Server name", systemImage: "server.rack")
+                    desktopField(title: "SERVER URL", text: $editServerUrl, placeholder: "http://...", systemImage: "network")
+                    Spacer()
+                    Button {
+                        Task { await updateAgentServer() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isAddingAgent {
+                                ProgressView().tint(.white)
+                            }
+                            Text("Save")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(!editServerName.isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .disabled(editServerName.isEmpty || isAddingAgent)
+                }
+                .padding(18)
+            }
+            .navigationTitle("Edit Server")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isShowingEditServer = false
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
@@ -1125,7 +1180,7 @@ struct ContentView: View {
         !agentNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !agentUrlDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !deviceToken.isEmpty
     }
 
-    private func mobileTopBar(title: String, subtitle: String) -> some View {
+    private func mobileTopBar(title: String, subtitle: String, onSettings: (() -> Void)? = nil) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -1142,9 +1197,20 @@ struct ContentView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Image(systemName: "gearshape")
-                    .font(.system(size: 20))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                if let onSettings {
+                    Button {
+                        onSettings()
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 20))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 20))
+                        .foregroundStyle(HermesMobileStyle.muted)
+                }
             }
         }
     }
@@ -1555,6 +1621,27 @@ struct ContentView: View {
             agentNameDraft = ""
             agentUrlDraft = ""
             statusMessage = "Added \(agent.name)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+        isAddingAgent = false
+    }
+
+    private func updateAgentServer() async {
+        guard let server = selectedAgentServer else { return }
+        let name = editServerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = editServerUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        isAddingAgent = true
+        do {
+            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let updated = try await client.updateAgent(id: server.id, name: name, baseURL: url, deviceToken: deviceToken)
+            if let idx = agents.firstIndex(where: { $0.id == server.id }) {
+                agents[idx] = updated
+            }
+            selectedAgentServer = updated
+            isShowingEditServer = false
+            statusMessage = "Updated \(updated.name)"
         } catch {
             statusMessage = error.localizedDescription
         }

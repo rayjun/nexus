@@ -116,6 +116,24 @@ class StateDbMobileStore:
             self._persist_agents()
         return removed
 
+    def update_agent(self, agent_id: str, request: AgentRequest) -> AgentInfo | None:
+        if agent_id not in self.agents:
+            return None
+        agent = self.agents[agent_id]
+        updated = AgentInfo(
+            id=agent.id,
+            name=request.name,
+            base_url=request.base_url.rstrip("/"),
+            status=agent.status,
+            profile=agent.profile,
+            model=agent.model,
+            created_at=agent.created_at,
+            last_seen_at=agent.last_seen_at,
+        )
+        self.agents[agent_id] = updated
+        self._persist_agents()
+        return updated
+
     def _load_agents(self) -> None:
         if not self.agents_path.exists():
             return

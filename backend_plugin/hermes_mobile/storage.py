@@ -298,6 +298,23 @@ class MockMobileStore:
             return False
         return self.agents.pop(agent_id, None) is not None
 
+    def update_agent(self, agent_id: str, request: AgentRequest) -> AgentInfo | None:
+        agent = self.agents.get(agent_id)
+        if not agent:
+            return None
+        updated = AgentInfo(
+            id=agent.id,
+            name=request.name,
+            base_url=request.base_url.rstrip("/"),
+            status=agent.status,
+            profile=agent.profile,
+            model=agent.model,
+            created_at=agent.created_at,
+            last_seen_at=agent.last_seen_at,
+        )
+        self.agents[agent_id] = updated
+        return deepcopy(updated)
+
     def get_status(self) -> "StatusResponse | None":
         return None
 
