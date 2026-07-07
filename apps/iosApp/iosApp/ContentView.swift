@@ -743,11 +743,17 @@ struct ContentView: View {
         let isUser = msg.role == "user"
         return HStack(alignment: .top, spacing: 10) {
             if isUser { Spacer(minLength: 40) }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 MarkdownText(text: msg.content, textColor: isUser ? .white : HermesMobileStyle.text)
+                HStack(spacing: 4) {
+                    Spacer()
+                    Text(formatTime(msg.createdAt))
+                        .font(.system(size: 10))
+                        .foregroundStyle(isUser ? .white.opacity(0.7) : HermesMobileStyle.subtleText)
+                }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 10)
             .background(
                 isUser ? HermesMobileStyle.blue : .white,
                 in: RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -759,6 +765,23 @@ struct ContentView: View {
             if !isUser { Spacer(minLength: 40) }
         }
     }
+
+    private func formatTime(_ iso: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = formatter.date(from: iso) else {
+            formatter.formatOptions = [.withInternetDateTime]
+            guard let d = formatter.date(from: iso) else { return "" }
+            return Self.timeFormatter.string(from: d)
+        }
+        return Self.timeFormatter.string(from: date)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
 
     private func agentInputBar(_ agent: PersistentAgent) -> some View {
         HStack(spacing: 10) {
