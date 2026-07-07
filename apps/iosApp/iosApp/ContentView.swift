@@ -299,16 +299,14 @@ struct ContentView: View {
                         HStack(spacing: 8) {
                             if isAddingAgent {
                                 ProgressView().tint(.white)
-                            } else {
-                                Image(systemName: "plus")
                             }
                             Text(isAddingAgent ? "Adding…" : "Add Server")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(canAddAgent ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .frame(height: 42)
+                        .background(canAddAgent ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .disabled(!canAddAgent || isAddingAgent)
                 }
@@ -632,16 +630,14 @@ struct ContentView: View {
                         HStack(spacing: 8) {
                             if isLoadingAgents2 {
                                 ProgressView().tint(.white)
-                            } else {
-                                Image(systemName: "sparkles")
                             }
                             Text(isLoadingAgents2 ? "Creating…" : "Create Agent")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(!newAgentName.isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .frame(height: 42)
+                        .background(!newAgentName.isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .disabled(newAgentName.isEmpty || isLoadingAgents2)
                 }
