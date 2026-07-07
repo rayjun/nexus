@@ -244,6 +244,24 @@ final class MobileGatewayClient {
         return try await post("/mobile/v1/agents/persistent/\(agentId)/messages", body: AgentMessageBody(content: content), token: deviceToken, timeout: 180)
     }
 
+    func cronJobs(deviceToken: String) async throws -> [CronJobInfo] {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        let response: CronJobsResponse = try await get("/mobile/v1/cron/jobs", token: deviceToken)
+        return response.jobs
+    }
+
+    func approvals(deviceToken: String) async throws -> [ApprovalInfo] {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        let response: ApprovalsResponse = try await get("/mobile/v1/approvals", token: deviceToken)
+        return response.approvals
+    }
+
+    func artifacts(deviceToken: String) async throws -> [ArtifactInfo] {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        let response: ArtifactsResponse = try await get("/mobile/v1/artifacts", token: deviceToken)
+        return response.artifacts
+    }
+
     private func get<T: Decodable>(_ path: String, token: String? = nil) async throws -> T {
         var request = try request(path: path, method: "GET")
         if let token {
@@ -314,4 +332,48 @@ private struct AgentCreateBody: Encodable {
 
 private struct AgentMessageBody: Encodable {
     let content: String
+}
+
+struct CronJobInfo: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let schedule: String
+    let enabled: Bool
+    let nextRunAt: String?
+    let lastRun: CronRunInfo?
+}
+
+struct CronRunInfo: Decodable {
+    let status: String
+    let summary: String
+    let finishedAt: String?
+}
+
+struct CronJobsResponse: Decodable {
+    let jobs: [CronJobInfo]
+}
+
+struct ApprovalInfo: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let status: String
+    let risk: String
+    let summary: String
+    let createdAt: String
+}
+
+struct ApprovalsResponse: Decodable {
+    let approvals: [ApprovalInfo]
+}
+
+struct ArtifactInfo: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let kind: String
+    let summary: String
+    let createdAt: String
+}
+
+struct ArtifactsResponse: Decodable {
+    let artifacts: [ArtifactInfo]
 }

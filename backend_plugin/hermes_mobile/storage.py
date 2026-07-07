@@ -23,6 +23,7 @@ from .models import (
     RiskLevel,
     SessionSummary,
     SessionTimeline,
+    StatusResponse,
     TimelineItem,
     ToolCall,
     expires_in,
@@ -296,6 +297,9 @@ class MockMobileStore:
         if agent_id == "agent_vps":
             return False
         return self.agents.pop(agent_id, None) is not None
+
+    def get_status(self) -> "StatusResponse | None":
+        return None
 
     def list_persistent_agents(self) -> list[PersistentAgent]:
         return []

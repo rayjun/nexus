@@ -157,6 +157,11 @@ class LiveApprovalMobileStore:
     def add_agent(self, request: AgentRequest) -> AgentInfo:
         return self.base_store.add_agent(request)
 
+    def get_status(self):
+        if hasattr(self.base_store, "get_status"):
+            return self.base_store.get_status()
+        return None
+
     def remove_agent(self, agent_id: str) -> bool:
         return self.base_store.remove_agent(agent_id)
 

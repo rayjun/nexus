@@ -7,7 +7,7 @@ from pathlib import Path
 from secrets import randbelow, token_urlsafe
 from typing import Any
 
-from .models import AgentInfo, AgentRequest, AgentMessageRequest, AgentMessageResponse, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, PersistentAgent, PersistentAgentCreate, PersistentAgentMessage, PersistentAgentsResponse, SessionSummary, SessionTimeline, StatusResponse, TimelineItem, ToolCall, expires_in
+from .models import AgentInfo, AgentRequest, AgentMessageRequest, AgentMessageResponse, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, CronRun, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, PersistentAgent, PersistentAgentCreate, PersistentAgentMessage, PersistentAgentsResponse, SessionSummary, SessionTimeline, StatusResponse, TimelineItem, ToolCall, expires_in
 
 
 class StateDbMobileStore:
@@ -420,10 +420,82 @@ class StateDbMobileStore:
         return []
 
     def list_cron_jobs(self, limit: int = 50) -> list[CronJob]:
-        return []
+        cron_path = Path.home() / ".hermes" / "cron" / "jobs.json"
+        if not cron_path.exists():
+            return []
+        try:
+            data = json.loads(cron_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return []
+        jobs: list[CronJob] = []
+        for item in data.get("jobs", [])[:limit]:
+            try:
+                next_run = None
+                if item.get("next_run_at"):
+                    from datetime import datetime as _dt
+                    next_run = _dt.fromisoformat(item["next_run_at"])
+                last_run = None
+                if item.get("state") == "completed" and item.get("last_run_output"):
+                    last_run = CronRun(status="success", summary=item.get("last_run_output", "")[:200])
+                jobs.append(CronJob(
+                    id=item["id"],
+                    name=item.get("name", item["id"]),
+                    schedule=item.get("schedule_display", item.get("schedule", {}).get("display", "")),
+                    enabled=item.get("enabled", True),
+                    next_run_at=next_run,
+                    last_run=last_run,
+                ))
+            except Exception:
+                continue
+        return jobs
 
     def get_cron_job(self, job_id: str) -> CronJob | None:
+        for job in self.list_cron_jobs():
+            if job.id == job_id:
+                return job
         return None
+
+    def get_status(self) -> "StatusResponse | None":
+        config_path = Path.home() / ".hermes" / "config.yaml"
+        base_url = "unknown"
+        model_name = "unknown"
+        provider = "unknown"
+        profile = "default"
+        if config_path.exists():
+            try:
+                import yaml
+                cfg = yaml.safe_load(config_path.read_text())
+                m = cfg.get("model", {})
+                base_url = m.get("base_url", base_url)
+                model_name = m.get("default", model_name)
+                provider = m.get("provider", provider)
+                profile = cfg.get("profile", profile)
+            except Exception:
+                pass
+        import socket
+        try:
+            node_name = socket.gethostname()
+        except Exception:
+            node_name = "Hermes"
+        return StatusResponse(
+            node_id=socket.gethostname() if True else "node",
+            node_name=node_name,
+            status="online",
+            gateway_ready=True,
+            hermes_version="0.x.x",
+            api_version="1.0",
+            profile=profile,
+            model={"provider": provider, "model": model_name},
+            features={
+                "events": True,
+                "approvals": True,
+                "session_timeline": True,
+                "cron": True,
+                "artifacts": True,
+                "push_relay": False,
+                "agents": True,
+            },
+        )
 
     def get_approval(self, approval_id: str) -> Approval | None:
         return None

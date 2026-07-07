@@ -39,6 +39,12 @@ struct ContentView: View {
     @State private var isShowingCreateAgent = false
     @State private var newAgentName = ""
     @State private var newAgentDesc = ""
+    @State private var cronJobs: [CronJobInfo] = []
+    @State private var approvalList: [ApprovalInfo] = []
+    @State private var artifactList: [ArtifactInfo] = []
+    @State private var isLoadingCron = false
+    @State private var isLoadingApprovals = false
+    @State private var isLoadingArtifacts = false
 
     private var isConnected: Bool {
         !deviceId.isEmpty && !deviceToken.isEmpty
@@ -395,16 +401,46 @@ struct ContentView: View {
             }
             .cardStyle()
         case "Automations":
-            placeholderPanel(title: "CRON JOBS", icon: "clock", rows: [("mind-github-sync", "in 41 min."), ("hermes-memory-sync", "in 41 min.")])
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("CRON JOBS", count: cronJobs.count)
+                if isLoadingCron {
+                    loadingRows
+                } else if cronJobs.isEmpty {
+                    emptyState(title: "No cron jobs", subtitle: "Scheduled tasks will appear here.")
+                } else {
+                    ForEach(cronJobs) { job in
+                        cronJobRow(job)
+                    }
+                }
+            }
+            .cardStyle()
         case "Artifacts":
-            placeholderPanel(title: "ARTIFACTS", icon: "doc", rows: [("No artifacts yet", "Files and generated outputs will land here")])
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("ARTIFACTS", count: artifactList.count)
+                if isLoadingArtifacts {
+                    loadingRows
+                } else if artifactList.isEmpty {
+                    emptyState(title: "No artifacts yet", subtitle: "Files and generated outputs will land here.")
+                } else {
+                    ForEach(artifactList) { artifact in
+                        artifactRow(artifact)
+                    }
+                }
+            }
+            .cardStyle()
         default:
             VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("INBOX", count: 2)
-                inboxRow(icon: "terminal", title: "Approvals", subtitle: "No pending approval requests", tint: HermesMobileStyle.green)
-                inboxRow(icon: "bubble.left.and.bubble.right", title: "Messages", subtitle: "Gateway connected and listening", tint: HermesMobileStyle.blue)
-                Button("Refresh sessions") {
-                    selectedSection = "Sessions"
+                sectionHeader("INBOX", count: approvalList.count)
+                if isLoadingApprovals {
+                    loadingRows
+                } else if approvalList.isEmpty {
+                    emptyState(title: "No pending approvals", subtitle: "Approval requests will appear here.")
+                } else {
+                    ForEach(approvalList) { approval in
+                        approvalRow(approval)
+                    }
+                }
+                Button("Refresh") {
                     Task { await loadHome() }
                 }
                 .font(.system(size: 14, weight: .medium))
@@ -1198,6 +1234,73 @@ struct ContentView: View {
         .cardStyle()
     }
 
+    private func cronJobRow(_ job: CronJobInfo) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: "clock")
+                .foregroundStyle(job.enabled ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(job.name)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(HermesMobileStyle.text)
+                Text(job.schedule)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(HermesMobileStyle.muted)
+            }
+            Spacer()
+            if job.enabled {
+                Circle().fill(HermesMobileStyle.green).frame(width: 8, height: 8)
+            } else {
+                Circle().fill(HermesMobileStyle.subtleText).frame(width: 8, height: 8)
+            }
+        }
+        .padding(12)
+        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func artifactRow(_ artifact: ArtifactInfo) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: "doc")
+                .foregroundStyle(HermesMobileStyle.blue)
+                .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(artifact.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(HermesMobileStyle.text)
+                Text(artifact.summary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(HermesMobileStyle.muted)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func approvalRow(_ approval: ApprovalInfo) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: "terminal")
+                .foregroundStyle(HermesMobileStyle.blue)
+                .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(approval.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(HermesMobileStyle.text)
+                Text(approval.summary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(HermesMobileStyle.muted)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Text(approval.status)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(approval.status == "pending" ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+        }
+        .padding(12)
+        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
     private func emptyState(title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
@@ -1272,18 +1375,27 @@ struct ContentView: View {
         isLoadingAgents = true
         isLoadingSessions = true
         isLoadingAgents2 = true
+        isLoadingCron = true
+        isLoadingApprovals = true
+        isLoadingArtifacts = true
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             nodeName = try await client.status().nodeName
             agents = try await client.agents(deviceToken: deviceToken)
             sessions = try await client.sessions(deviceToken: deviceToken)
             persistentAgents = try await client.persistentAgents(deviceToken: deviceToken)
+            cronJobs = try await client.cronJobs(deviceToken: deviceToken)
+            approvalList = try await client.approvals(deviceToken: deviceToken)
+            artifactList = try await client.artifacts(deviceToken: deviceToken)
         } catch MobileGatewayError.badStatus(401) {
             statusMessage = "Reconnecting..."
             await reconnect()
             isLoadingAgents = false
             isLoadingSessions = false
             isLoadingAgents2 = false
+            isLoadingCron = false
+            isLoadingApprovals = false
+            isLoadingArtifacts = false
             return
         } catch {
             statusMessage = error.localizedDescription
@@ -1291,6 +1403,9 @@ struct ContentView: View {
         isLoadingAgents = false
         isLoadingSessions = false
         isLoadingAgents2 = false
+        isLoadingCron = false
+        isLoadingApprovals = false
+        isLoadingArtifacts = false
     }
 
     private func reconnect() async {
@@ -1304,6 +1419,9 @@ struct ContentView: View {
             agents = try await client.agents(deviceToken: deviceToken)
             sessions = try await client.sessions(deviceToken: deviceToken)
             persistentAgents = try await client.persistentAgents(deviceToken: deviceToken)
+            cronJobs = try await client.cronJobs(deviceToken: deviceToken)
+            approvalList = try await client.approvals(deviceToken: deviceToken)
+            artifactList = try await client.artifacts(deviceToken: deviceToken)
             statusMessage = "Reconnected to \(nodeName)"
         } catch {
             statusMessage = error.localizedDescription
