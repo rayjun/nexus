@@ -318,8 +318,14 @@ struct ContentView: View {
             .navigationTitle("Add Server")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isShowingAddServer = false }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isShowingAddServer = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                    }
                 }
             }
         }
