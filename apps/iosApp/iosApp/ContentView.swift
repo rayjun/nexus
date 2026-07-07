@@ -162,6 +162,9 @@ struct ContentView: View {
     private var appHome: some View {
         if let selectedAgentServer {
             serverDashboard(selectedAgentServer)
+                .sheet(isPresented: $isShowingEditServer) {
+                    editServerSheet
+                }
         } else {
             agentServerList
         }
@@ -284,9 +287,6 @@ struct ContentView: View {
         .background(HermesMobileStyle.background)
         .sheet(isPresented: $isShowingAddServer) {
             addServerSheet
-        }
-        .sheet(isPresented: $isShowingEditServer) {
-            editServerSheet
         }
     }
 
