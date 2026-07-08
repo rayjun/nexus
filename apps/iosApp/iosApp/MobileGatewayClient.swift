@@ -86,12 +86,33 @@ struct PersistentAgent: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let description: String
-    let icon: String
+    var icon: String = "sparkles"
     let capabilities: [String]
     let linkedSessionIds: [String]
     let createdAt: String
     let updatedAt: String
     let lastMessageAt: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        icon = try c.decodeIfPresent(String.self, forKey: .icon) ?? "sparkles"
+        capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
+        linkedSessionIds = try c.decodeIfPresent([String].self, forKey: .linkedSessionIds) ?? []
+        createdAt = try c.decode(String.self, forKey: .createdAt)
+        updatedAt = try c.decode(String.self, forKey: .updatedAt)
+        lastMessageAt = try c.decodeIfPresent(String.self, forKey: .lastMessageAt)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, icon, capabilities
+        case linkedSessionIds = "linked_session_ids"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case lastMessageAt = "last_message_at"
+    }
 }
 
 struct PersistentAgentsResponse: Decodable {
