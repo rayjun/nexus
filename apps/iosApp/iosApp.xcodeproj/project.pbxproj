@@ -10,6 +10,7 @@
 		A10000000000000000000001 /* HermesMobileiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* HermesMobileiOSApp.swift */; };
 		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* ContentView.swift */; };
 		A10000000000000000000003 /* MobileGatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* MobileGatewayClient.swift */; };
+		A10000000000000000000004 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* KeychainHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -17,6 +18,7 @@
 		A10000000000000000000011 /* HermesMobileiOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesMobileiOSApp.swift; sourceTree = "<group>"; };
 		A10000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A10000000000000000000013 /* MobileGatewayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileGatewayClient.swift; sourceTree = "<group>"; };
+		A10000000000000000000015 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		A10000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -45,6 +47,7 @@
 				A10000000000000000000011 /* HermesMobileiOSApp.swift */,
 				A10000000000000000000012 /* ContentView.swift */,
 				A10000000000000000000013 /* MobileGatewayClient.swift */,
+				A10000000000000000000015 /* KeychainHelper.swift */,
 				A10000000000000000000014 /* Info.plist */,
 			);
 			path = iosApp;
@@ -148,6 +151,7 @@
 				A10000000000000000000001 /* HermesMobileiOSApp.swift in Sources */,
 				A10000000000000000000002 /* ContentView.swift in Sources */,
 				A10000000000000000000003 /* MobileGatewayClient.swift in Sources */,
+				A10000000000000000000004 /* KeychainHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

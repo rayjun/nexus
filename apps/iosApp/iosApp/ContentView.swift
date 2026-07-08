@@ -2,8 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @AppStorage("gateway_base_url") private var gatewayBaseUrl = "http://127.0.0.1:8765"
-    @AppStorage("device_id") private var deviceId = ""
-    @AppStorage("device_token") private var deviceToken = ""
+    @State private var deviceId = KeychainHelper.load(key: "device_id")
+    @State private var deviceToken = KeychainHelper.load(key: "device_token")
     @State private var gatewayInput = "http://127.0.0.1:8765"
     @State private var deviceName = UIDevice.current.name
     @State private var statusMessage = ""
@@ -1596,6 +1596,8 @@ struct ContentView: View {
             gatewayBaseUrl = url
             deviceId = completed.deviceId
             deviceToken = completed.deviceToken
+            KeychainHelper.save(completed.deviceId, key: "device_id")
+            KeychainHelper.save(completed.deviceToken, key: "device_token")
             nodeName = status.nodeName
             statusMessage = "Connected to \(status.nodeName)"
             await loadHome()
@@ -1649,6 +1651,8 @@ struct ContentView: View {
             let completed = try await client.completePairing(code: pairing.code, deviceName: deviceName.isEmpty ? UIDevice.current.name : deviceName, platform: "ios")
             deviceId = completed.deviceId
             deviceToken = completed.deviceToken
+            KeychainHelper.save(completed.deviceId, key: "device_id")
+            KeychainHelper.save(completed.deviceToken, key: "device_token")
             nodeName = try await client.status().nodeName
             agents = try await client.agents(deviceToken: deviceToken)
             sessions = try await client.sessions(deviceToken: deviceToken)
@@ -1894,6 +1898,8 @@ struct ContentView: View {
     private func clearPairing() {
         deviceId = ""
         deviceToken = ""
+        KeychainHelper.delete(key: "device_id")
+        KeychainHelper.delete(key: "device_token")
         sessions = []
         agents = []
         nodeName = ""
