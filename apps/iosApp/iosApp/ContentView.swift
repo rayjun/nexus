@@ -293,6 +293,7 @@ struct ContentView: View {
             .padding(.bottom, 28)
         }
         .background(HermesMobileStyle.background)
+        .refreshable { await loadHome() }
         .sheet(isPresented: $isShowingAddServer) {
             addServerSheet
         }
@@ -885,7 +886,9 @@ struct ContentView: View {
                             proxy.scrollTo(lastId, anchor: .bottom)
                         }
                     }
+                    .refreshable { await loadAgentMessages(agent) }
                 }
+                .scrollDismissesKeyboard(.interactively)
                 agentInputBar(agent)
             }
         }
