@@ -61,7 +61,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                HermesMobileStyle.background.ignoresSafeArea()
+                NexusStyle.background.ignoresSafeArea()
                 if isConnected {
                     appHome
                 } else {
@@ -110,10 +110,10 @@ struct ContentView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Connect to Hermes")
                                 .font(.system(size: 22, weight: .semibold))
-                                .foregroundStyle(HermesMobileStyle.text)
+                                .foregroundStyle(NexusStyle.text)
                             Text("Pair this iPhone with your local Hermes gateway.")
                                 .font(.system(size: 14))
-                                .foregroundStyle(HermesMobileStyle.muted)
+                                .foregroundStyle(NexusStyle.muted)
                         }
                     }
 
@@ -142,7 +142,7 @@ struct ContentView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .frame(height: 48)
-                        .background(HermesMobileStyle.blue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(NexusStyle.blue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .disabled(isConnecting || normalized(gatewayInput).isEmpty)
 
@@ -191,7 +191,7 @@ struct ContentView: View {
                             Text("Agent servers")
                                 .font(.system(size: 14, weight: .medium))
                         }
-                        .foregroundStyle(HermesMobileStyle.blue)
+                        .foregroundStyle(NexusStyle.blue)
                     }
                     .buttonStyle(.plain)
                     mobileTopBar(title: agent.name, subtitle: agent.baseUrl) {
@@ -217,14 +217,14 @@ struct ContentView: View {
                 HStack(spacing: 10) {
                     Text("Nexus")
                         .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(HermesMobileStyle.text)
+                        .foregroundStyle(NexusStyle.text)
                     Spacer()
                     Button {
                         Task { await loadHome() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                     }
                     .buttonStyle(.plain)
                     Button {
@@ -234,7 +234,7 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 22))
-                            .foregroundStyle(HermesMobileStyle.blue)
+                            .foregroundStyle(NexusStyle.blue)
                     }
                     .buttonStyle(.plain)
                 }
@@ -242,11 +242,11 @@ struct ContentView: View {
 
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(HermesMobileStyle.blue)
+                        .fill(NexusStyle.blue)
                         .frame(width: 7, height: 7)
                     Text("\(agents.filter { $0.status == "online" }.count) of \(agents.count) servers online")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(HermesMobileStyle.muted)
+                        .foregroundStyle(NexusStyle.muted)
                 }
 
                 if isLoadingAgents {
@@ -256,10 +256,10 @@ struct ContentView: View {
                     VStack(alignment: .center, spacing: 14) {
                         Image(systemName: "server.rack")
                             .font(.system(size: 40))
-                            .foregroundStyle(HermesMobileStyle.subtleText)
+                            .foregroundStyle(NexusStyle.subtleText)
                         Text("No servers yet")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                         Button {
                             agentNameDraft = ""
                             agentUrlDraft = ""
@@ -273,7 +273,7 @@ struct ContentView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 20)
                             .frame(height: 44)
-                            .background(HermesMobileStyle.blue, in: Capsule())
+                            .background(NexusStyle.blue, in: Capsule())
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -292,7 +292,7 @@ struct ContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 28)
         }
-        .background(HermesMobileStyle.background)
+        .background(NexusStyle.background)
         .refreshable { await loadHome() }
         .sheet(isPresented: $isShowingAddServer) {
             addServerSheet
@@ -302,7 +302,7 @@ struct ContentView: View {
     private var addServerSheet: some View {
         NavigationStack {
             ZStack {
-                HermesMobileStyle.background.ignoresSafeArea()
+                NexusStyle.background.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 16) {
                     desktopField(title: "SERVER NAME", text: $agentNameDraft, placeholder: "Local Hermes", systemImage: "server.rack")
                     desktopField(title: "SERVER URL", text: $agentUrlDraft, placeholder: "http://100.x.y.z:8765", systemImage: "network")
@@ -325,7 +325,7 @@ struct ContentView: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
-                        .background(canAddAgent ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(canAddAgent ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .disabled(!canAddAgent || isAddingAgent)
                 }
@@ -340,7 +340,7 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                     }
                 }
             }
@@ -352,7 +352,7 @@ struct ContentView: View {
     private var editServerSheet: some View {
         NavigationStack {
             ZStack {
-                HermesMobileStyle.background.ignoresSafeArea()
+                NexusStyle.background.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 16) {
                     desktopField(title: "SERVER NAME", text: $editServerName, placeholder: "Server name", systemImage: "server.rack")
                     desktopField(title: "SERVER URL", text: $editServerUrl, placeholder: "http://...", systemImage: "network")
@@ -370,7 +370,7 @@ struct ContentView: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
-                        .background(!editServerName.isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(!editServerName.isEmpty ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .disabled(editServerName.isEmpty || isAddingAgent)
                 }
@@ -385,7 +385,7 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                     }
                 }
             }
@@ -396,9 +396,9 @@ struct ContentView: View {
 
     private var statusStrip: some View {
         HStack(spacing: 8) {
-            statusChip(icon: "checkmark", text: "Gateway", color: HermesMobileStyle.green)
-            statusChip(icon: "sparkles", text: "Agents", color: HermesMobileStyle.text)
-            statusChip(icon: "clock", text: "Cron", color: HermesMobileStyle.text)
+            statusChip(icon: "checkmark", text: "Gateway", color: NexusStyle.green)
+            statusChip(icon: "sparkles", text: "Agents", color: NexusStyle.text)
+            statusChip(icon: "clock", text: "Cron", color: NexusStyle.text)
         }
     }
 
@@ -411,17 +411,17 @@ struct ContentView: View {
                     } label: {
                         HStack(spacing: 7) {
                             Circle()
-                                .fill(selectedSection == item ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                                .fill(selectedSection == item ? NexusStyle.blue : NexusStyle.subtleText)
                                 .frame(width: 6, height: 6)
                             Text(item.uppercased())
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                 .tracking(1.8)
                         }
-                        .foregroundStyle(selectedSection == item ? HermesMobileStyle.blue : HermesMobileStyle.muted)
+                        .foregroundStyle(selectedSection == item ? NexusStyle.blue : NexusStyle.muted)
                         .padding(.horizontal, 10)
                         .frame(height: 34)
-                        .background(selectedSection == item ? HermesMobileStyle.selected : .white.opacity(0.72), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                        .background(selectedSection == item ? NexusStyle.selected : .white.opacity(0.72), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
                     }
                 }
             }
@@ -536,19 +536,19 @@ struct ContentView: View {
             HStack(spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(isOnline ? HermesMobileStyle.blue.opacity(0.12) : HermesMobileStyle.line.opacity(0.5))
+                        .fill(isOnline ? NexusStyle.blue.opacity(0.12) : NexusStyle.line.opacity(0.5))
                         .frame(width: 48, height: 48)
                     Image(systemName: "server.rack")
                         .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(isOnline ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                        .foregroundStyle(isOnline ? NexusStyle.blue : NexusStyle.subtleText)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(agent.name)
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(HermesMobileStyle.text)
+                        .foregroundStyle(NexusStyle.text)
                     Text(agent.baseUrl)
                         .font(.system(size: 13, design: .monospaced))
-                        .foregroundStyle(HermesMobileStyle.muted)
+                        .foregroundStyle(NexusStyle.muted)
                         .lineLimit(1)
                 }
                 Spacer()
@@ -572,33 +572,33 @@ struct ContentView: View {
             HStack(spacing: 12) {
                 HStack(spacing: 5) {
                     Circle()
-                        .fill(isOnline ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                        .fill(isOnline ? NexusStyle.blue : NexusStyle.subtleText)
                         .frame(width: 6, height: 6)
                     Text(isOnline ? "Online" : "Offline")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isOnline ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                        .foregroundStyle(isOnline ? NexusStyle.blue : NexusStyle.subtleText)
                 }
                 Text("·")
-                    .foregroundStyle(HermesMobileStyle.subtleText)
+                    .foregroundStyle(NexusStyle.subtleText)
                 Text(agent.profile)
                     .font(.system(size: 12))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
                 Text("·")
-                    .foregroundStyle(HermesMobileStyle.subtleText)
+                    .foregroundStyle(NexusStyle.subtleText)
                 Text(agent.model)
                     .font(.system(size: 12))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(HermesMobileStyle.subtleText)
+                    .foregroundStyle(NexusStyle.subtleText)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 14)
             .background(.white)
         }
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onTapGesture {
             selectedAgentServer = agent
@@ -609,7 +609,7 @@ struct ContentView: View {
         VStack(spacing: 10) {
             ForEach(0..<3, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(HermesMobileStyle.line.opacity(0.55))
+                    .fill(NexusStyle.line.opacity(0.55))
                     .frame(height: 54)
             }
         }
@@ -625,41 +625,41 @@ struct ContentView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(HermesMobileStyle.blue.opacity(0.12))
+                        .fill(NexusStyle.blue.opacity(0.12))
                         .frame(width: 40, height: 40)
                     Image(systemName: agent.icon.isEmpty ? "sparkles" : agent.icon)
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(HermesMobileStyle.blue)
+                        .foregroundStyle(NexusStyle.blue)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(agent.name)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(HermesMobileStyle.text)
+                        .foregroundStyle(NexusStyle.text)
                     if !agent.description.isEmpty {
                         Text(agent.description)
                             .font(.system(size: 12))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                             .lineLimit(1)
                     }
                     HStack(spacing: 8) {
                         Text("\(agent.capabilities.count) capabilities")
                             .font(.system(size: 11))
-                            .foregroundStyle(HermesMobileStyle.subtleText)
+                            .foregroundStyle(NexusStyle.subtleText)
                         Text("·")
-                            .foregroundStyle(HermesMobileStyle.subtleText)
+                            .foregroundStyle(NexusStyle.subtleText)
                         Text("\(agent.linkedSessionIds.count) sessions")
                             .font(.system(size: 11))
-                            .foregroundStyle(HermesMobileStyle.subtleText)
+                            .foregroundStyle(NexusStyle.subtleText)
                     }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(HermesMobileStyle.subtleText)
+                    .foregroundStyle(NexusStyle.subtleText)
             }
             .padding(12)
             .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -683,7 +683,7 @@ struct ContentView: View {
     private var createAgentSheet: some View {
         NavigationStack {
             ZStack {
-                HermesMobileStyle.background.ignoresSafeArea()
+                NexusStyle.background.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 16) {
                     desktopField(title: "AGENT NAME", text: $newAgentName, placeholder: "Code Reviewer", systemImage: "sparkles")
                     VStack(alignment: .leading, spacing: 7) {
@@ -693,16 +693,16 @@ struct ContentView: View {
                         }
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .tracking(1.7)
-                        .foregroundStyle(HermesMobileStyle.blue)
+                        .foregroundStyle(NexusStyle.blue)
                         TextField("What does this agent do?", text: $newAgentDesc, axis: .vertical)
                             .font(.system(size: 15))
-                            .foregroundStyle(HermesMobileStyle.text)
+                            .foregroundStyle(NexusStyle.text)
                             .textInputAutocapitalization(.sentences)
                             .lineLimit(1...3)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
                             .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
                     }
                     Spacer()
                     Button {
@@ -723,7 +723,7 @@ struct ContentView: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
-                        .background(!newAgentName.isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(!newAgentName.isEmpty ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .disabled(newAgentName.isEmpty || isLoadingAgents2)
                 }
@@ -738,7 +738,7 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                     }
                 }
             }
@@ -751,13 +751,13 @@ struct ContentView: View {
         let icons = ["sparkles", "star", "bolt", "wrench.and.screwdriver", "keyboard", "paintbrush", "magnifyingglass", "shield", "cpu", "globe"]
         return NavigationStack {
             ZStack {
-                HermesMobileStyle.background.ignoresSafeArea()
+                NexusStyle.background.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("ICON")
                             .font(.system(size: 11, weight: .semibold, design: .monospaced))
                             .tracking(1.7)
-                            .foregroundStyle(HermesMobileStyle.blue)
+                            .foregroundStyle(NexusStyle.blue)
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 10) {
                                 ForEach(icons, id: \.self) { iconName in
@@ -766,11 +766,11 @@ struct ContentView: View {
                                     } label: {
                                         ZStack {
                                             Circle()
-                                                .fill(editAgentIcon == iconName ? HermesMobileStyle.blue.opacity(0.15) : HermesMobileStyle.line.opacity(0.4))
+                                                .fill(editAgentIcon == iconName ? NexusStyle.blue.opacity(0.15) : NexusStyle.line.opacity(0.4))
                                                 .frame(width: 40, height: 40)
                                             Image(systemName: iconName)
                                                 .font(.system(size: 16))
-                                                .foregroundStyle(editAgentIcon == iconName ? HermesMobileStyle.blue : HermesMobileStyle.muted)
+                                                .foregroundStyle(editAgentIcon == iconName ? NexusStyle.blue : NexusStyle.muted)
                                         }
                                     }
                                     .buttonStyle(.plain)
@@ -786,16 +786,16 @@ struct ContentView: View {
                         }
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .tracking(1.7)
-                        .foregroundStyle(HermesMobileStyle.blue)
+                        .foregroundStyle(NexusStyle.blue)
                         TextField("What does this agent do?", text: $editAgentDesc, axis: .vertical)
                             .font(.system(size: 15))
-                            .foregroundStyle(HermesMobileStyle.text)
+                            .foregroundStyle(NexusStyle.text)
                             .textInputAutocapitalization(.sentences)
                             .lineLimit(1...3)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
                             .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
                     }
                     Spacer()
                     Button {
@@ -809,7 +809,7 @@ struct ContentView: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
-                        .background(!editAgentName.isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(!editAgentName.isEmpty ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .disabled(editAgentName.isEmpty || isLoadingAgents2)
                 }
@@ -824,7 +824,7 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                     }
                 }
             }
@@ -835,7 +835,7 @@ struct ContentView: View {
 
     private func agentConversationView(_ agent: PersistentAgent) -> some View {
         ZStack {
-            HermesMobileStyle.background.ignoresSafeArea()
+            NexusStyle.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -847,20 +847,20 @@ struct ContentView: View {
                                             HStack(spacing: 5) {
                                                 Image(systemName: "checkmark.circle")
                                                     .font(.system(size: 10))
-                                                    .foregroundStyle(HermesMobileStyle.blue)
+                                                    .foregroundStyle(NexusStyle.blue)
                                                 Text(cap)
                                                     .font(.system(size: 12))
-                                                    .foregroundStyle(HermesMobileStyle.muted)
+                                                    .foregroundStyle(NexusStyle.muted)
                                             }
                                         }
                                     }
                                 }
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(HermesMobileStyle.subtleText)
-                                .tint(HermesMobileStyle.subtleText)
+                                .foregroundStyle(NexusStyle.subtleText)
+                                .tint(NexusStyle.subtleText)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
-                                .background(HermesMobileStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .background(NexusStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
                             if isLoadingAgentMessages {
                                 loadingRows
@@ -918,23 +918,23 @@ struct ContentView: View {
         return HStack(alignment: .top, spacing: 10) {
             if isUser { Spacer(minLength: 40) }
             VStack(alignment: .leading, spacing: 4) {
-                MarkdownText(text: msg.content, textColor: isUser ? .white : HermesMobileStyle.text)
+                MarkdownText(text: msg.content, textColor: isUser ? .white : NexusStyle.text)
                 HStack(spacing: 4) {
                     Spacer()
                     Text(formatTime(msg.createdAt))
                         .font(.system(size: 10))
-                        .foregroundStyle(isUser ? .white.opacity(0.7) : HermesMobileStyle.subtleText)
+                        .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.subtleText)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(
-                isUser ? HermesMobileStyle.blue : .white,
+                isUser ? NexusStyle.blue : .white,
                 in: RoundedRectangle(cornerRadius: 16, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(isUser ? Color.clear : HermesMobileStyle.border, lineWidth: 1)
+                    .stroke(isUser ? Color.clear : NexusStyle.border, lineWidth: 1)
             )
             if !isUser { Spacer(minLength: 40) }
         }
@@ -961,13 +961,13 @@ struct ContentView: View {
         HStack(spacing: 10) {
             TextField("Message \(agent.name)…", text: $agentInputDraft, axis: .vertical)
                 .font(.system(size: 15))
-                .foregroundStyle(HermesMobileStyle.text)
+                .foregroundStyle(NexusStyle.text)
                 .textInputAutocapitalization(.sentences)
                 .lineLimit(1...4)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
             Button {
                 Task { await sendAgentMsg(agent) }
             } label: {
@@ -982,13 +982,13 @@ struct ContentView: View {
                         .frame(width: 38, height: 38)
                 }
             }
-            .background(!agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSendingAgentMessage ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: Circle())
+            .background(!agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSendingAgentMessage ? NexusStyle.blue : NexusStyle.subtleText, in: Circle())
             .disabled(agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingAgentMessage)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.white.opacity(0.94))
-        .overlay(Rectangle().fill(HermesMobileStyle.border).frame(height: 1), alignment: .top)
+        .overlay(Rectangle().fill(NexusStyle.border).frame(height: 1), alignment: .top)
     }
 
     private var commandBar: some View {
@@ -1000,13 +1000,13 @@ struct ContentView: View {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 20, weight: .light))
-                    .foregroundStyle(HermesMobileStyle.blue)
+                    .foregroundStyle(NexusStyle.blue)
                 Text("Start with an agent")
                     .font(.system(size: 16))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
                 Spacer()
                 Circle()
-                    .fill(HermesMobileStyle.blue)
+                    .fill(NexusStyle.blue)
                     .frame(width: 40, height: 40)
                     .overlay(Image(systemName: "arrow.up").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white))
             }
@@ -1015,25 +1015,25 @@ struct ContentView: View {
         .padding(.horizontal, 16)
         .frame(height: 60)
         .background(.white.opacity(0.92))
-        .overlay(Rectangle().fill(HermesMobileStyle.border).frame(height: 1), alignment: .top)
+        .overlay(Rectangle().fill(NexusStyle.border).frame(height: 1), alignment: .top)
     }
 
     private var goalComposer: some View {
         NavigationStack {
             ZStack {
-                HermesMobileStyle.background.ignoresSafeArea()
+                NexusStyle.background.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("NEW SESSION")
                             .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .tracking(2.4)
-                            .foregroundStyle(HermesMobileStyle.blue)
+                            .foregroundStyle(NexusStyle.blue)
                         Text("Start with a goal")
                             .font(.system(size: 28, weight: .semibold))
-                            .foregroundStyle(HermesMobileStyle.text)
+                            .foregroundStyle(NexusStyle.text)
                         Text("Create a new Hermes session. The agent will run from the connected gateway, not on this device.")
                             .font(.system(size: 14))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                     }
 
                     TextEditor(text: $goalDraft)
@@ -1042,12 +1042,12 @@ struct ContentView: View {
                         .padding(12)
                         .frame(minHeight: 170)
                         .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
                         .overlay(alignment: .topLeading) {
                             if goalDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 Text("Describe the outcome you want Hermes to achieve…")
                                     .font(.system(size: 17))
-                                    .foregroundStyle(HermesMobileStyle.subtleText)
+                                    .foregroundStyle(NexusStyle.subtleText)
                                     .padding(.horizontal, 17)
                                     .padding(.vertical, 20)
                                     .allowsHitTesting(false)
@@ -1055,8 +1055,8 @@ struct ContentView: View {
                         }
 
                     HStack(spacing: 8) {
-                        statusChip(icon: "server.rack", text: nodeName.isEmpty ? "Hermes" : nodeName, color: HermesMobileStyle.text)
-                        statusChip(icon: "network", text: "Gateway", color: HermesMobileStyle.green)
+                        statusChip(icon: "server.rack", text: nodeName.isEmpty ? "Hermes" : nodeName, color: NexusStyle.text)
+                        statusChip(icon: "network", text: "Gateway", color: NexusStyle.green)
                     }
 
                     Spacer()
@@ -1078,7 +1078,7 @@ struct ContentView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16)
                         .frame(height: 50)
-                        .background(canCreateSession ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .background(canCreateSession ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                     }
                     .disabled(!canCreateSession || isCreatingSession)
                 }
@@ -1096,7 +1096,7 @@ struct ContentView: View {
 
     private func sessionDetail(_ session: SessionSummary) -> some View {
         ZStack {
-            HermesMobileStyle.background.ignoresSafeArea()
+            NexusStyle.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -1162,13 +1162,13 @@ struct ContentView: View {
         HStack(spacing: 10) {
             TextField("Continue this session…", text: $followUpDraft, axis: .vertical)
                 .font(.system(size: 15))
-                .foregroundStyle(HermesMobileStyle.text)
+                .foregroundStyle(NexusStyle.text)
                 .textInputAutocapitalization(.sentences)
                 .lineLimit(1...4)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
             Button {
                 Task { await appendGoal(to: session) }
             } label: {
@@ -1183,13 +1183,13 @@ struct ContentView: View {
                         .frame(width: 38, height: 38)
                 }
             }
-            .background(canAppendGoal ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: Circle())
+            .background(canAppendGoal ? NexusStyle.blue : NexusStyle.subtleText, in: Circle())
             .disabled(!canAppendGoal || isAppendingGoal)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.white.opacity(0.94))
-        .overlay(Rectangle().fill(HermesMobileStyle.border).frame(height: 1), alignment: .top)
+        .overlay(Rectangle().fill(NexusStyle.border).frame(height: 1), alignment: .top)
     }
 
     private var canAppendGoal: Bool {
@@ -1207,18 +1207,18 @@ struct ContentView: View {
             if isThinking {
                 DisclosureGroup("Thinking") {
                     if !body.isEmpty {
-                        MarkdownText(text: body, textColor: HermesMobileStyle.subtleText)
+                        MarkdownText(text: body, textColor: NexusStyle.subtleText)
                     }
                     if let calls = item.toolCalls, !calls.isEmpty {
                         VStack(alignment: .leading, spacing: 3) {
                             ForEach(calls.prefix(6)) { call in
                                 HStack(spacing: 5) {
                                     Circle()
-                                        .fill(call.status == "failed" ? .red : HermesMobileStyle.subtleText)
+                                        .fill(call.status == "failed" ? .red : NexusStyle.subtleText)
                                         .frame(width: 4, height: 4)
                                     Text(call.summary)
                                         .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(HermesMobileStyle.subtleText)
+                                        .foregroundStyle(NexusStyle.subtleText)
                                         .lineLimit(1)
                                 }
                             }
@@ -1226,19 +1226,19 @@ struct ContentView: View {
                     }
                 }
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(HermesMobileStyle.subtleText)
-                .tint(HermesMobileStyle.subtleText)
+                .foregroundStyle(NexusStyle.subtleText)
+                .tint(NexusStyle.subtleText)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(HermesMobileStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(NexusStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     if body.isEmpty {
                         Text(timelineTitle(item))
                             .font(.system(size: 15))
-                            .foregroundStyle(isUser ? .white : HermesMobileStyle.text)
+                            .foregroundStyle(isUser ? .white : NexusStyle.text)
                     } else {
-                        MarkdownText(text: body, textColor: isUser ? .white : HermesMobileStyle.text)
+                        MarkdownText(text: body, textColor: isUser ? .white : NexusStyle.text)
                     }
 
                     if let calls = item.toolCalls, !calls.isEmpty {
@@ -1247,11 +1247,11 @@ struct ContentView: View {
                                 ForEach(calls.prefix(8)) { call in
                                     HStack(spacing: 5) {
                                         Circle()
-                                            .fill(call.status == "failed" ? .red : (call.status == "running" ? HermesMobileStyle.blue : HermesMobileStyle.subtleText))
+                                            .fill(call.status == "failed" ? .red : (call.status == "running" ? NexusStyle.blue : NexusStyle.subtleText))
                                             .frame(width: 5, height: 5)
                                         Text(call.summary)
                                             .font(.system(size: 11, design: .monospaced))
-                                            .foregroundStyle(call.status == "failed" ? .red : HermesMobileStyle.muted)
+                                            .foregroundStyle(call.status == "failed" ? .red : NexusStyle.muted)
                                             .lineLimit(2)
                                     }
                                     .padding(.horizontal, 8)
@@ -1261,19 +1261,19 @@ struct ContentView: View {
                             }
                         }
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(HermesMobileStyle.subtleText)
-                        .tint(HermesMobileStyle.subtleText)
+                        .foregroundStyle(NexusStyle.subtleText)
+                        .tint(NexusStyle.subtleText)
                     }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
                 .background(
-                    isUser ? HermesMobileStyle.blue : .white,
+                    isUser ? NexusStyle.blue : .white,
                     in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(isUser ? Color.clear : HermesMobileStyle.border, lineWidth: 1)
+                        .stroke(isUser ? Color.clear : NexusStyle.border, lineWidth: 1)
                 )
             }
 
@@ -1303,16 +1303,16 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(HermesMobileStyle.selected)
+                    .fill(NexusStyle.selected)
                     .frame(width: 34, height: 34)
-                    .overlay(Image(systemName: "rectangle.split.2x1").foregroundStyle(HermesMobileStyle.muted))
+                    .overlay(Image(systemName: "rectangle.split.2x1").foregroundStyle(NexusStyle.muted))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 23, weight: .semibold))
-                        .foregroundStyle(HermesMobileStyle.text)
+                        .foregroundStyle(NexusStyle.text)
                     Text(subtitle)
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(HermesMobileStyle.muted)
+                        .foregroundStyle(NexusStyle.muted)
                         .lineLimit(1)
                 }
                 Spacer()
@@ -1322,13 +1322,13 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "gearshape")
                             .font(.system(size: 20))
-                            .foregroundStyle(HermesMobileStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                     }
                     .buttonStyle(.plain)
                 } else {
                     Image(systemName: "gearshape")
                         .font(.system(size: 20))
-                        .foregroundStyle(HermesMobileStyle.muted)
+                        .foregroundStyle(NexusStyle.muted)
                 }
             }
         }
@@ -1342,15 +1342,15 @@ struct ContentView: View {
             }
             .font(.system(size: 11, weight: .semibold, design: .monospaced))
             .tracking(1.7)
-            .foregroundStyle(HermesMobileStyle.blue)
+            .foregroundStyle(NexusStyle.blue)
             TextField(placeholder, text: text)
                 .font(.system(size: 15))
-                .foregroundStyle(HermesMobileStyle.text)
+                .foregroundStyle(NexusStyle.text)
                 .textInputAutocapitalization(.never)
                 .padding(.horizontal, 12)
                 .frame(height: 44)
                 .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
         }
     }
 
@@ -1362,34 +1362,34 @@ struct ContentView: View {
                 .tracking(3)
             Text("\(count)")
                 .tracking(0)
-                .foregroundStyle(HermesMobileStyle.subtleText)
+                .foregroundStyle(NexusStyle.subtleText)
             Spacer()
         }
         .font(.system(size: 12, weight: .semibold, design: .monospaced))
-        .foregroundStyle(HermesMobileStyle.blue)
+        .foregroundStyle(NexusStyle.blue)
     }
 
     private func sessionRow(_ session: SessionSummary) -> some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(session.status == "running" ? HermesMobileStyle.green : HermesMobileStyle.subtleText)
+                .fill(session.status == "running" ? NexusStyle.green : NexusStyle.subtleText)
                 .frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.title)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
+                    .foregroundStyle(NexusStyle.text)
                     .lineLimit(1)
                 Text(session.status)
                     .font(.system(size: 12))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
             }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(HermesMobileStyle.subtleText)
+                .foregroundStyle(NexusStyle.subtleText)
         }
         .padding(12)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func inboxRow(icon: String, title: String, subtitle: String, tint: Color) -> some View {
@@ -1402,41 +1402,41 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
+                    .foregroundStyle(NexusStyle.text)
                 Text(subtitle)
                     .font(.system(size: 12))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
             }
             Spacer()
         }
         .padding(12)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func capabilityRow(icon: String, title: String, subtitle: String, active: Bool) -> some View {
         HStack(spacing: 11) {
             Image(systemName: icon)
-                .foregroundStyle(active ? HermesMobileStyle.blue : HermesMobileStyle.muted)
+                .foregroundStyle(active ? NexusStyle.blue : NexusStyle.muted)
                 .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
+                    .foregroundStyle(NexusStyle.text)
                 Text(subtitle)
                     .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
             }
             Spacer()
         }
         .padding(10)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func placeholderPanel(title: String, icon: String, rows: [(String, String)]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader(title, count: rows.count)
             ForEach(rows, id: \.0) { row in
-                inboxRow(icon: icon, title: row.0, subtitle: row.1, tint: HermesMobileStyle.blue)
+                inboxRow(icon: icon, title: row.0, subtitle: row.1, tint: NexusStyle.blue)
             }
         }
         .cardStyle()
@@ -1445,111 +1445,111 @@ struct ContentView: View {
     private func cronJobRow(_ job: CronJobInfo) -> some View {
         HStack(spacing: 11) {
             Image(systemName: "clock")
-                .foregroundStyle(job.enabled ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                .foregroundStyle(job.enabled ? NexusStyle.blue : NexusStyle.subtleText)
                 .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(job.name)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
+                    .foregroundStyle(NexusStyle.text)
                 Text(job.schedule)
                     .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
             }
             Spacer()
             if job.enabled {
-                Circle().fill(HermesMobileStyle.green).frame(width: 8, height: 8)
+                Circle().fill(NexusStyle.green).frame(width: 8, height: 8)
             } else {
-                Circle().fill(HermesMobileStyle.subtleText).frame(width: 8, height: 8)
+                Circle().fill(NexusStyle.subtleText).frame(width: 8, height: 8)
             }
         }
         .padding(12)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func artifactRow(_ artifact: ArtifactInfo) -> some View {
         HStack(spacing: 11) {
             Image(systemName: "doc")
-                .foregroundStyle(HermesMobileStyle.blue)
+                .foregroundStyle(NexusStyle.blue)
                 .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(artifact.title)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
+                    .foregroundStyle(NexusStyle.text)
                 Text(artifact.summary)
                     .font(.system(size: 12))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
                     .lineLimit(2)
             }
             Spacer()
         }
         .padding(12)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func approvalRow(_ approval: ApprovalInfo) -> some View {
         HStack(spacing: 11) {
             Image(systemName: "terminal")
-                .foregroundStyle(HermesMobileStyle.blue)
+                .foregroundStyle(NexusStyle.blue)
                 .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(approval.title)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
+                    .foregroundStyle(NexusStyle.text)
                 Text(approval.summary)
                     .font(.system(size: 12))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
                     .lineLimit(2)
             }
             Spacer()
             Text(approval.status)
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(approval.status == "pending" ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+                .foregroundStyle(approval.status == "pending" ? NexusStyle.blue : NexusStyle.subtleText)
         }
         .padding(12)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func activeSessionRow(_ session: SessionSummary) -> some View {
         HStack(spacing: 11) {
             ZStack {
                 Circle()
-                    .fill(HermesMobileStyle.green.opacity(0.12))
+                    .fill(NexusStyle.green.opacity(0.12))
                     .frame(width: 32, height: 32)
                 Image(systemName: "play.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(HermesMobileStyle.green)
+                    .foregroundStyle(NexusStyle.green)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title.isEmpty ? session.id : session.title)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(HermesMobileStyle.text)
+                    .foregroundStyle(NexusStyle.text)
                     .lineLimit(1)
                 Text(session.id)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(HermesMobileStyle.muted)
+                    .foregroundStyle(NexusStyle.muted)
                     .lineLimit(1)
             }
             Spacer()
             Circle()
-                .fill(HermesMobileStyle.green)
+                .fill(NexusStyle.green)
                 .frame(width: 8, height: 8)
         }
         .padding(12)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func emptyState(title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(HermesMobileStyle.text)
+                .foregroundStyle(NexusStyle.text)
             Text(subtitle)
                 .font(.system(size: 13))
-                .foregroundStyle(HermesMobileStyle.muted)
+                .foregroundStyle(NexusStyle.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func statusChip(icon: String, text: String, color: Color) -> some View {
@@ -1563,28 +1563,28 @@ struct ContentView: View {
         .padding(.horizontal, 9)
         .frame(height: 28)
         .background(.white.opacity(0.72), in: Capsule())
-        .overlay(Capsule().stroke(HermesMobileStyle.border, lineWidth: 1))
+        .overlay(Capsule().stroke(NexusStyle.border, lineWidth: 1))
     }
 
     private func statusPill(text: String, positive: Bool) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(positive ? HermesMobileStyle.green : HermesMobileStyle.subtleText)
+                .fill(positive ? NexusStyle.green : NexusStyle.subtleText)
                 .frame(width: 7, height: 7)
             Text(text)
                 .font(.system(size: 13))
-                .foregroundStyle(positive ? HermesMobileStyle.green : HermesMobileStyle.muted)
+                .foregroundStyle(positive ? NexusStyle.green : NexusStyle.muted)
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
-        .background(HermesMobileStyle.row, in: Capsule())
+        .background(NexusStyle.row, in: Capsule())
     }
 
     private func iconTile(_ systemName: String) -> some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(HermesMobileStyle.selected)
+            .fill(NexusStyle.selected)
             .frame(width: 48, height: 48)
-            .overlay(Image(systemName: systemName).font(.system(size: 24)).foregroundStyle(HermesMobileStyle.blue))
+            .overlay(Image(systemName: systemName).font(.system(size: 24)).foregroundStyle(NexusStyle.blue))
     }
 
     private func connect() async {
@@ -1924,7 +1924,7 @@ struct ContentView: View {
     }
 }
 
-private enum HermesMobileStyle {
+private enum NexusStyle {
     static let background = Color(red: 0.965, green: 0.976, blue: 0.992)
     static let card = Color.white.opacity(0.86)
     static let row = Color(red: 0.975, green: 0.981, blue: 0.992)
@@ -1941,8 +1941,8 @@ private enum HermesMobileStyle {
 private extension View {
     func cardStyle() -> some View {
         padding(14)
-            .background(HermesMobileStyle.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+            .background(NexusStyle.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
             .shadow(color: Color.black.opacity(0.035), radius: 16, x: 0, y: 8)
     }
 }
