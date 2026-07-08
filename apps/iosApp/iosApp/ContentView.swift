@@ -495,8 +495,26 @@ struct ContentView: View {
             }
             .cardStyle()
         default:
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("INBOX", count: approvalList.count)
+            VStack(alignment: .leading, spacing: 16) {
+                let activeSessions = sessions.filter { $0.status == "running" }
+                sectionHeader("ACTIVE TASKS", count: activeSessions.count)
+                if activeSessions.isEmpty {
+                    emptyState(title: "No active tasks", subtitle: "Running Hermes sessions will appear here.")
+                } else {
+                    ForEach(activeSessions.prefix(5)) { session in
+                        Button {
+                            selectedTimeline = nil
+                            timelineError = ""
+                            followUpDraft = ""
+                            selectedSession = session
+                        } label: {
+                            activeSessionRow(session)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                sectionHeader("APPROVALS", count: approvalList.count)
                 if isLoadingApprovals {
                     loadingRows
                 } else if approvalList.isEmpty {
@@ -506,11 +524,6 @@ struct ContentView: View {
                         approvalRow(approval)
                     }
                 }
-                Button("Refresh") {
-                    Task { await loadHome() }
-                }
-                .font(.system(size: 14, weight: .medium))
-                .buttonStyle(.bordered)
             }
             .cardStyle()
         }
@@ -1488,6 +1501,35 @@ struct ContentView: View {
             Text(approval.status)
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(approval.status == "pending" ? HermesMobileStyle.blue : HermesMobileStyle.subtleText)
+        }
+        .padding(12)
+        .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func activeSessionRow(_ session: SessionSummary) -> some View {
+        HStack(spacing: 11) {
+            ZStack {
+                Circle()
+                    .fill(HermesMobileStyle.green.opacity(0.12))
+                    .frame(width: 32, height: 32)
+                Image(systemName: "play.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(HermesMobileStyle.green)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.title.isEmpty ? session.id : session.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(HermesMobileStyle.text)
+                    .lineLimit(1)
+                Text(session.id)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(HermesMobileStyle.muted)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Circle()
+                .fill(HermesMobileStyle.green)
+                .frame(width: 8, height: 8)
         }
         .padding(12)
         .background(HermesMobileStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
