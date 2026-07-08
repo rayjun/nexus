@@ -199,3 +199,28 @@ class LiveApprovalMobileStore:
 
     def get_timeline(self, session_id: str) -> SessionTimeline | None:
         return self.base_store.get_timeline(session_id)
+
+    def list_persistent_agents(self):
+        return self.base_store.list_persistent_agents()
+
+    def create_persistent_agent(self, name: str, description: str = "", icon: str = "sparkles"):
+        return self.base_store.create_persistent_agent(name, description, icon)
+
+    def update_persistent_agent(self, agent_id: str, request):
+        if hasattr(self.base_store, "update_persistent_agent"):
+            return self.base_store.update_persistent_agent(agent_id, request)
+        return None
+
+    def delete_persistent_agent(self, agent_id: str) -> bool:
+        return self.base_store.delete_persistent_agent(agent_id)
+
+    def get_agent_messages(self, agent_id: str):
+        return self.base_store.get_agent_messages(agent_id)
+
+    def send_agent_message(self, agent_id: str, content: str):
+        return self.base_store.send_agent_message(agent_id, content)
+
+    def link_session_to_agent(self, agent_id: str, session_id: str):
+        if hasattr(self.base_store, "link_session_to_agent"):
+            return self.base_store.link_session_to_agent(agent_id, session_id)
+        return None

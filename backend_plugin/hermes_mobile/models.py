@@ -106,6 +106,7 @@ class PersistentAgent(BaseModel):
     id: str
     name: str
     description: str = ""
+    icon: str = "sparkles"
     capabilities: list[str] = Field(default_factory=list)
     linked_session_ids: list[str] = Field(default_factory=list)
     created_at: datetime
@@ -116,6 +117,13 @@ class PersistentAgent(BaseModel):
 class PersistentAgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=500)
+    icon: str = Field(default="sparkles", max_length=50)
+
+
+class PersistentAgentUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    icon: str | None = Field(default=None, max_length=50)
 
 
 class PersistentAgentMessage(BaseModel):

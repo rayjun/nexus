@@ -321,15 +321,19 @@ class MockMobileStore:
     def list_persistent_agents(self) -> list[PersistentAgent]:
         return []
 
-    def create_persistent_agent(self, name: str, description: str = "") -> PersistentAgent:
+    def create_persistent_agent(self, name: str, description: str = "", icon: str = "sparkles") -> PersistentAgent:
         now = now_utc()
         return PersistentAgent(
             id=f"agent_{token_urlsafe(8)}",
             name=name,
             description=description,
+            icon=icon,
             created_at=now,
             updated_at=now,
         )
+
+    def update_persistent_agent(self, agent_id: str, request) -> PersistentAgent | None:
+        return None
 
     def delete_persistent_agent(self, agent_id: str) -> bool:
         return False

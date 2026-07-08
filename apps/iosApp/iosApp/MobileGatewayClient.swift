@@ -86,6 +86,7 @@ struct PersistentAgent: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let description: String
+    let icon: String
     let capabilities: [String]
     let linkedSessionIds: [String]
     let createdAt: String
@@ -231,6 +232,11 @@ final class MobileGatewayClient {
         return try await post("/mobile/v1/agents/persistent", body: AgentCreateBody(name: name, description: description), token: deviceToken)
     }
 
+    func updatePersistentAgent(id: String, name: String?, description: String?, icon: String?, deviceToken: String) async throws -> PersistentAgent {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        return try await post("/mobile/v1/agents/persistent/\(id)", body: AgentUpdateBody(name: name, description: description, icon: icon), token: deviceToken)
+    }
+
     func deletePersistentAgent(id: String, deviceToken: String) async throws {
         if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
         var request = try request(path: "/mobile/v1/agents/persistent/\(id)", method: "DELETE")
@@ -333,6 +339,12 @@ private struct AgentBody: Encodable {
 private struct AgentCreateBody: Encodable {
     let name: String
     let description: String
+}
+
+private struct AgentUpdateBody: Encodable {
+    let name: String?
+    let description: String?
+    let icon: String?
 }
 
 private struct AgentMessageBody: Encodable {

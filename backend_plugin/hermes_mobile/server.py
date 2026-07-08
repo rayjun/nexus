@@ -11,7 +11,7 @@ from typing import Optional, Protocol
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket
 
 from .live_approvals import LiveApprovalMobileStore
-from .models import AgentInfo, AgentRequest, AgentMessageRequest, AgentMessageResponse, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, DevicesResponse, GoalRequest, GoalResponse, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, PersistentAgent, PersistentAgentCreate, PersistentAgentMessage, PersistentAgentsResponse, SessionSummary, SessionTimeline, StatusResponse
+from .models import AgentInfo, AgentRequest, AgentMessageRequest, AgentMessageResponse, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, DevicesResponse, GoalRequest, GoalResponse, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, PersistentAgent, PersistentAgentCreate, PersistentAgentUpdate, PersistentAgentMessage, PersistentAgentsResponse, SessionSummary, SessionTimeline, StatusResponse, TimelineItem, ToolCall, expires_in
 from .real_store import StateDbMobileStore
 from .storage import MockMobileStore
 
@@ -29,7 +29,8 @@ class MobileStore(Protocol):
     def get_status(self) -> "StatusResponse | None": ...
     def remove_agent(self, agent_id: str) -> bool: ...
     def list_persistent_agents(self) -> list["PersistentAgent"]: ...
-    def create_persistent_agent(self, name: str, description: str = "") -> "PersistentAgent": ...
+    def create_persistent_agent(self, name: str, description: str = "", icon: str = "sparkles") -> "PersistentAgent": ...
+    def update_persistent_agent(self, agent_id: str, request: "PersistentAgentUpdate") -> "PersistentAgent | None": ...
     def delete_persistent_agent(self, agent_id: str) -> bool: ...
     def get_agent_messages(self, agent_id: str) -> list["PersistentAgentMessage"]: ...
     def send_agent_message(self, agent_id: str, content: str) -> tuple["PersistentAgentMessage", "PersistentAgentMessage"]: ...
@@ -190,7 +191,16 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
     @app.post("/mobile/v1/agents/persistent", response_model=PersistentAgent)
     def create_persistent_agent(request: PersistentAgentCreate, device_id: str = Depends(require_device)) -> PersistentAgent:
         if hasattr(store, "create_persistent_agent"):
-            return store.create_persistent_agent(request.name, request.description)
+            return store.create_persistent_agent(request.name, request.description, request.icon)
+        raise HTTPException(status_code=501, detail="not_supported")
+
+    @app.put("/mobile/v1/agents/persistent/{agent_id}", response_model=PersistentAgent)
+    def update_persistent_agent(agent_id: str, request: PersistentAgentUpdate, device_id: str = Depends(require_device)) -> PersistentAgent:
+        if hasattr(store, "update_persistent_agent"):
+            result = store.update_persistent_agent(agent_id, request)
+            if not result:
+                raise HTTPException(status_code=404, detail="agent_not_found")
+            return result
         raise HTTPException(status_code=501, detail="not_supported")
 
     @app.delete("/mobile/v1/agents/persistent/{agent_id}", status_code=204)

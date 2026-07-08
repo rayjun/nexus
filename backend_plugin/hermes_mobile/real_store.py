@@ -163,6 +163,7 @@ class StateDbMobileStore:
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     description TEXT DEFAULT '',
+                    icon TEXT DEFAULT 'sparkles',
                     capabilities TEXT DEFAULT '[]',
                     linked_session_ids TEXT DEFAULT '[]',
                     created_at REAL NOT NULL,
@@ -189,30 +190,48 @@ class StateDbMobileStore:
         self._ensure_agent_tables()
         with self._connect() as con:
             rows = con.execute(
-                "SELECT id, name, description, capabilities, linked_session_ids, created_at, updated_at, last_message_at FROM mobile_agents ORDER BY COALESCE(last_message_at, created_at) DESC"
+                "SELECT id, name, description, icon, capabilities, linked_session_ids, created_at, updated_at, last_message_at FROM mobile_agents ORDER BY COALESCE(last_message_at, created_at) DESC"
             ).fetchall()
         return [self._persistent_agent(row) for row in rows]
 
-    def create_persistent_agent(self, name: str, description: str = "") -> PersistentAgent:
+    def create_persistent_agent(self, name: str, description: str = "", icon: str = "sparkles") -> PersistentAgent:
         self._ensure_agent_tables()
         agent_id = f"agent_{token_urlsafe(8)}"
         now = datetime.now(UTC)
         now_ts = now.timestamp()
         with self._connect() as con:
             con.execute(
-                "INSERT INTO mobile_agents (id, name, description, capabilities, linked_session_ids, created_at, updated_at, last_message_at) VALUES (?, ?, ?, '[]', '[]', ?, ?, NULL)",
-                (agent_id, name, description, now_ts, now_ts),
+                "INSERT INTO mobile_agents (id, name, description, icon, capabilities, linked_session_ids, created_at, updated_at, last_message_at) VALUES (?, ?, ?, ?, '[]', '[]', ?, ?, NULL)",
+                (agent_id, name, description, icon, now_ts, now_ts),
             )
             con.commit()
         return PersistentAgent(
             id=agent_id,
             name=name,
             description=description,
+            icon=icon,
             capabilities=[],
             linked_session_ids=[],
             created_at=now,
             updated_at=now,
         )
+
+    def update_persistent_agent(self, agent_id: str, request) -> PersistentAgent | None:
+        self._ensure_agent_tables()
+        with self._connect() as con:
+            row = con.execute("SELECT id, name, description, icon, capabilities, linked_session_ids, created_at, updated_at, last_message_at FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
+            if not row:
+                return None
+            name = request.name if request.name is not None else row["name"]
+            desc = request.description if request.description is not None else (row["description"] or "")
+            icon = request.icon if request.icon is not None else (row["icon"] or "sparkles")
+            now_ts = datetime.now(UTC).timestamp()
+            con.execute(
+                "UPDATE mobile_agents SET name = ?, description = ?, icon = ?, updated_at = ? WHERE id = ?",
+                (name, desc, icon, now_ts, agent_id),
+            )
+            con.commit()
+        return self._persistent_agent_from_row(row, json.loads(row["capabilities"] or "[]"), json.loads(row["linked_session_ids"] or "[]"))
 
     def delete_persistent_agent(self, agent_id: str) -> bool:
         self._ensure_agent_tables()
@@ -335,7 +354,7 @@ class StateDbMobileStore:
     def link_session_to_agent(self, agent_id: str, session_id: str) -> PersistentAgent | None:
         self._ensure_agent_tables()
         with self._connect() as con:
-            row = con.execute("SELECT id, name, description, capabilities, linked_session_ids, created_at, updated_at, last_message_at FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
+            row = con.execute("SELECT id, name, description, icon, capabilities, linked_session_ids, created_at, updated_at, last_message_at FROM mobile_agents WHERE id = ?", (agent_id,)).fetchone()
             if not row:
                 return None
             linked: list[str] = json.loads(row["linked_session_ids"])
@@ -363,6 +382,7 @@ class StateDbMobileStore:
             id=row["id"],
             name=row["name"],
             description=row["description"] or "",
+            icon=row["icon"] if "icon" in row.keys() else "sparkles",
             capabilities=json.loads(row["capabilities"] or "[]"),
             linked_session_ids=json.loads(row["linked_session_ids"] or "[]"),
             created_at=self._dt(row["created_at"]),
@@ -375,6 +395,7 @@ class StateDbMobileStore:
             id=row["id"],
             name=row["name"],
             description=row["description"] or "",
+            icon=row["icon"] if "icon" in row.keys() else "sparkles",
             capabilities=caps,
             linked_session_ids=linked,
             created_at=self._dt(row["created_at"]),

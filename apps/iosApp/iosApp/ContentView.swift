@@ -42,6 +42,11 @@ struct ContentView: View {
     @State private var isShowingEditServer = false
     @State private var editServerName = ""
     @State private var editServerUrl = ""
+    @State private var isShowingEditAgent = false
+    @State private var editAgentId = ""
+    @State private var editAgentName = ""
+    @State private var editAgentDesc = ""
+    @State private var editAgentIcon = "sparkles"
     @State private var cronJobs: [CronJobInfo] = []
     @State private var approvalList: [ApprovalInfo] = []
     @State private var artifactList: [ArtifactInfo] = []
@@ -78,6 +83,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isShowingCreateAgent) {
             createAgentSheet
+        }
+        .sheet(isPresented: $isShowingEditAgent) {
+            editAgentSheet
         }
         .fullScreenCover(item: $selectedPersistentAgent) { agent in
             NavigationStack {
@@ -605,7 +613,7 @@ struct ContentView: View {
                     Circle()
                         .fill(HermesMobileStyle.blue.opacity(0.12))
                         .frame(width: 40, height: 40)
-                    Image(systemName: "sparkles")
+                    Image(systemName: agent.icon.isEmpty ? "sparkles" : agent.icon)
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(HermesMobileStyle.blue)
                 }
@@ -641,6 +649,15 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
+            Button {
+                editAgentId = agent.id
+                editAgentName = agent.name
+                editAgentDesc = agent.description
+                editAgentIcon = agent.icon
+                isShowingEditAgent = true
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
             Button(role: .destructive) {
                 Task { await deleteAgent(agent) }
             } label: {
@@ -704,6 +721,92 @@ struct ContentView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         isShowingCreateAgent = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(HermesMobileStyle.muted)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var editAgentSheet: some View {
+        let icons = ["sparkles", "star", "bolt", "wrench.and.screwdriver", "keyboard", "paintbrush", "magnifyingglass", "shield", "cpu", "globe"]
+        return NavigationStack {
+            ZStack {
+                HermesMobileStyle.background.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("ICON")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .tracking(1.7)
+                            .foregroundStyle(HermesMobileStyle.blue)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(icons, id: \.self) { iconName in
+                                    Button {
+                                        editAgentIcon = iconName
+                                    } label: {
+                                        ZStack {
+                                            Circle()
+                                                .fill(editAgentIcon == iconName ? HermesMobileStyle.blue.opacity(0.15) : HermesMobileStyle.line.opacity(0.4))
+                                                .frame(width: 40, height: 40)
+                                            Image(systemName: iconName)
+                                                .font(.system(size: 16))
+                                                .foregroundStyle(editAgentIcon == iconName ? HermesMobileStyle.blue : HermesMobileStyle.muted)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    desktopField(title: "AGENT NAME", text: $editAgentName, placeholder: "Agent name", systemImage: "person")
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "text.alignleft")
+                            Text("DESCRIPTION")
+                        }
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .tracking(1.7)
+                        .foregroundStyle(HermesMobileStyle.blue)
+                        TextField("What does this agent do?", text: $editAgentDesc, axis: .vertical)
+                            .font(.system(size: 15))
+                            .foregroundStyle(HermesMobileStyle.text)
+                            .textInputAutocapitalization(.sentences)
+                            .lineLimit(1...3)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(HermesMobileStyle.border, lineWidth: 1))
+                    }
+                    Spacer()
+                    Button {
+                        Task { await updatePersistentAgent() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isLoadingAgents2 { ProgressView().tint(.white) }
+                            Text("Save")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(!editAgentName.isEmpty ? HermesMobileStyle.blue : HermesMobileStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .disabled(editAgentName.isEmpty || isLoadingAgents2)
+                }
+                .padding(18)
+            }
+            .navigationTitle("Edit Agent")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isShowingEditAgent = false
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
@@ -1543,6 +1646,37 @@ struct ContentView: View {
         } catch {
             statusMessage = error.localizedDescription
         }
+    }
+
+    private func updatePersistentAgent() async {
+        let name = editAgentName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        isLoadingAgents2 = true
+        do {
+            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let updated = try await client.updatePersistentAgent(id: editAgentId, name: name, description: editAgentDesc, icon: editAgentIcon, deviceToken: deviceToken)
+            if let idx = persistentAgents.firstIndex(where: { $0.id == editAgentId }) {
+                persistentAgents[idx] = updated
+            }
+            isShowingEditAgent = false
+            statusMessage = "Updated \(updated.name)"
+        } catch MobileGatewayError.badStatus(401) {
+            await reconnect()
+            do {
+                let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+                let updated = try await client.updatePersistentAgent(id: editAgentId, name: name, description: editAgentDesc, icon: editAgentIcon, deviceToken: deviceToken)
+                if let idx = persistentAgents.firstIndex(where: { $0.id == editAgentId }) {
+                    persistentAgents[idx] = updated
+                }
+                isShowingEditAgent = false
+                statusMessage = "Updated \(updated.name)"
+            } catch {
+                statusMessage = error.localizedDescription
+            }
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+        isLoadingAgents2 = false
     }
 
     private func loadAgentMessages(_ agent: PersistentAgent) async {
