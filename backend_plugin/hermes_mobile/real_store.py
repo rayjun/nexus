@@ -31,6 +31,7 @@ class StateDbMobileStore:
             )
         }
         self._load_agents()
+        self._load_device_tokens()
 
     def start_pairing(self) -> PairingStartResponse:
         pairing_id = f"pair_{token_urlsafe(8)}"
@@ -54,12 +55,14 @@ class StateDbMobileStore:
             raise PairingCodeExpired()
         device_id = f"dev_{token_urlsafe(8)}"
         device_token = f"hmob_{token_urlsafe(32)}"
+        now = datetime.now(UTC)
         self.device_tokens[device_token] = DeviceInfo(
             id=device_id,
             name=request.device_name,
             platform=request.platform,
-            created_at=datetime.now(UTC),
+            created_at=now,
         )
+        self._persist_device_token(device_token, device_id, request.device_name, request.platform, now)
         return PairingCompleteResponse(
             device_id=device_id,
             device_token=device_token,
@@ -89,6 +92,7 @@ class StateDbMobileStore:
         for token, device in list(self.device_tokens.items()):
             if device.id == device_id:
                 del self.device_tokens[token]
+                self._delete_device_token(token)
                 return True
         return False
 
@@ -154,6 +158,48 @@ class StateDbMobileStore:
         self.agents_path.parent.mkdir(parents=True, exist_ok=True)
         managed = [agent.model_dump(mode="json") for agent in self.agents.values() if agent.id != "agent_vps"]
         self.agents_path.write_text(json.dumps({"agents": managed}, indent=2, ensure_ascii=False))
+
+    def _ensure_device_table(self) -> None:
+        with self._connect() as con:
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mobile_device_tokens (
+                    token TEXT PRIMARY KEY,
+                    device_id TEXT NOT NULL,
+                    name TEXT DEFAULT '',
+                    platform TEXT DEFAULT '',
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            con.commit()
+
+    def _load_device_tokens(self) -> None:
+        self._ensure_device_table()
+        with self._connect() as con:
+            rows = con.execute("SELECT token, device_id, name, platform, created_at FROM mobile_device_tokens").fetchall()
+        for row in rows:
+            self.device_tokens[row["token"]] = DeviceInfo(
+                id=row["device_id"],
+                name=row["name"],
+                platform=row["platform"],
+                created_at=self._dt(row["created_at"]),
+            )
+
+    def _persist_device_token(self, token: str, device_id: str, name: str, platform: str, created_at: datetime) -> None:
+        self._ensure_device_table()
+        with self._connect() as con:
+            con.execute(
+                "INSERT OR REPLACE INTO mobile_device_tokens (token, device_id, name, platform, created_at) VALUES (?, ?, ?, ?, ?)",
+                (token, device_id, name, platform, created_at.timestamp()),
+            )
+            con.commit()
+
+    def _delete_device_token(self, token: str) -> None:
+        self._ensure_device_table()
+        with self._connect() as con:
+            con.execute("DELETE FROM mobile_device_tokens WHERE token = ?", (token,))
+            con.commit()
 
     def _ensure_agent_tables(self) -> None:
         with self._connect() as con:
