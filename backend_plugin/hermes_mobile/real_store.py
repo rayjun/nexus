@@ -398,6 +398,10 @@ class StateDbMobileStore:
             if not assistant_content:
                 assistant_content = "[No response from Hermes]"
             return assistant_content, hermes_session_id
+        except httpx.ConnectError:
+            return "[Error: Hermes API server is not running. Start it with: hermes gateway restart]", None
+        except httpx.TimeoutException:
+            return "[Error: Hermes API server timed out. The model may be slow or overloaded.]", None
         except Exception as e:
             return f"[Error: unable to call Hermes: {e}]", None
 
