@@ -184,6 +184,10 @@ class StateDbMobileStore:
                 )
                 """
             )
+            try:
+                con.execute("ALTER TABLE mobile_agents ADD COLUMN icon TEXT DEFAULT 'sparkles'")
+            except sqlite3.OperationalError:
+                pass
             con.commit()
 
     def list_persistent_agents(self) -> list[PersistentAgent]:
