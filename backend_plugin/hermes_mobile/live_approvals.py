@@ -214,8 +214,8 @@ class LiveApprovalMobileStore:
     def delete_persistent_agent(self, agent_id: str) -> bool:
         return self.base_store.delete_persistent_agent(agent_id)
 
-    def get_agent_messages(self, agent_id: str):
-        return self.base_store.get_agent_messages(agent_id)
+    def get_agent_messages(self, agent_id: str, limit: int = 50, offset: int = 0):
+        return self.base_store.get_agent_messages(agent_id, limit=limit, offset=offset)
 
     def send_agent_message(self, agent_id: str, content: str):
         return self.base_store.send_agent_message(agent_id, content)

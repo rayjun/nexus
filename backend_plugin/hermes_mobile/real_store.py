@@ -294,12 +294,12 @@ class StateDbMobileStore:
             con.commit()
         return True
 
-    def get_agent_messages(self, agent_id: str) -> list[PersistentAgentMessage]:
+    def get_agent_messages(self, agent_id: str, limit: int = 50, offset: int = 0) -> list[PersistentAgentMessage]:
         self._ensure_agent_tables()
         with self._connect() as con:
             rows = con.execute(
-                "SELECT id, agent_id, role, content, created_at FROM mobile_agent_messages WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
-                (agent_id,),
+                "SELECT id, agent_id, role, content, created_at FROM mobile_agent_messages WHERE agent_id = ? ORDER BY created_at ASC, id ASC LIMIT ? OFFSET ?",
+                (agent_id, limit, offset),
             ).fetchall()
         return [
             PersistentAgentMessage(

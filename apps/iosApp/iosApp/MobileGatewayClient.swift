@@ -244,9 +244,9 @@ final class MobileGatewayClient {
         try await sendEmpty(request)
     }
 
-    func agentMessages(agentId: String, deviceToken: String) async throws -> [PersistentAgentMessage] {
+    func agentMessages(agentId: String, deviceToken: String, limit: Int = 50, offset: Int = 0) async throws -> [PersistentAgentMessage] {
         if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        let response: AgentMessagesResponse = try await get("/mobile/v1/agents/persistent/\(agentId)/messages", token: deviceToken)
+        let response: AgentMessagesResponse = try await get("/mobile/v1/agents/persistent/\(agentId)/messages?limit=\(limit)&offset=\(offset)", token: deviceToken)
         return response.messages
     }
 

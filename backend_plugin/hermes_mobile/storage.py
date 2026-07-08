@@ -338,7 +338,7 @@ class MockMobileStore:
     def delete_persistent_agent(self, agent_id: str) -> bool:
         return False
 
-    def get_agent_messages(self, agent_id: str) -> list[PersistentAgentMessage]:
+    def get_agent_messages(self, agent_id: str, limit: int = 50, offset: int = 0) -> list[PersistentAgentMessage]:
         return []
 
     def send_agent_message(self, agent_id: str, content: str) -> tuple[PersistentAgentMessage, PersistentAgentMessage]:
