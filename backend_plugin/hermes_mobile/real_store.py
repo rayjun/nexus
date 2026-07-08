@@ -375,7 +375,7 @@ class StateDbMobileStore:
                     break
 
         if not api_key:
-            api_key = "hermes-mobile-local"
+            return "[Error: API_SERVER_KEY not set in ~/.hermes/.env]", None
 
         url = "http://127.0.0.1:8642/v1/chat/completions"
         headers = {
