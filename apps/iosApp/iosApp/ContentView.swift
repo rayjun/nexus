@@ -74,7 +74,7 @@ struct ContentView: View {
             gatewayInput = gatewayBaseUrl
             if isConnected {
                 Task { await loadHome() }
-            } else if ProcessInfo.processInfo.environment["HERMES_MOBILE_AUTOCONNECT"] == "1" {
+            } else {
                 Task { await connect() }
             }
         }
