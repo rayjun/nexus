@@ -1616,13 +1616,20 @@ struct ContentView: View {
         isLoadingArtifacts = true
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
-            nodeName = try await client.status().nodeName
-            agents = try await client.agents(deviceToken: deviceToken)
-            sessions = try await client.sessions(deviceToken: deviceToken)
-            persistentAgents = try await client.persistentAgents(deviceToken: deviceToken)
-            cronJobs = try await client.cronJobs(deviceToken: deviceToken)
-            approvalList = try await client.approvals(deviceToken: deviceToken)
-            artifactList = try await client.artifacts(deviceToken: deviceToken)
+            async let statusResult = client.status()
+            async let agentsResult = client.agents(deviceToken: deviceToken)
+            async let sessionsResult = client.sessions(deviceToken: deviceToken)
+            async let persistentResult = client.persistentAgents(deviceToken: deviceToken)
+            async let cronResult = client.cronJobs(deviceToken: deviceToken)
+            async let approvalsResult = client.approvals(deviceToken: deviceToken)
+            async let artifactsResult = client.artifacts(deviceToken: deviceToken)
+            nodeName = try await statusResult.nodeName
+            agents = try await agentsResult
+            sessions = try await sessionsResult
+            persistentAgents = try await persistentResult
+            cronJobs = try await cronResult
+            approvalList = try await approvalsResult
+            artifactList = try await artifactsResult
         } catch MobileGatewayError.badStatus(401) {
             statusMessage = "Reconnecting..."
             await reconnect()
@@ -1653,13 +1660,20 @@ struct ContentView: View {
             deviceToken = completed.deviceToken
             KeychainHelper.save(completed.deviceId, key: "device_id")
             KeychainHelper.save(completed.deviceToken, key: "device_token")
-            nodeName = try await client.status().nodeName
-            agents = try await client.agents(deviceToken: deviceToken)
-            sessions = try await client.sessions(deviceToken: deviceToken)
-            persistentAgents = try await client.persistentAgents(deviceToken: deviceToken)
-            cronJobs = try await client.cronJobs(deviceToken: deviceToken)
-            approvalList = try await client.approvals(deviceToken: deviceToken)
-            artifactList = try await client.artifacts(deviceToken: deviceToken)
+            async let statusResult = client.status()
+            async let agentsResult = client.agents(deviceToken: deviceToken)
+            async let sessionsResult = client.sessions(deviceToken: deviceToken)
+            async let persistentResult = client.persistentAgents(deviceToken: deviceToken)
+            async let cronResult = client.cronJobs(deviceToken: deviceToken)
+            async let approvalsResult = client.approvals(deviceToken: deviceToken)
+            async let artifactsResult = client.artifacts(deviceToken: deviceToken)
+            nodeName = try await statusResult.nodeName
+            agents = try await agentsResult
+            sessions = try await sessionsResult
+            persistentAgents = try await persistentResult
+            cronJobs = try await cronResult
+            approvalList = try await approvalsResult
+            artifactList = try await artifactsResult
             statusMessage = "Reconnected to \(nodeName)"
         } catch {
             statusMessage = error.localizedDescription
