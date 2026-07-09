@@ -65,7 +65,7 @@ def create_default_store() -> MobileStore:
 
 
 def create_app(store: MobileStore | None = None) -> FastAPI:
-    app = FastAPI(title="Hermes Mobile Gateway Mock", version="0.1.0")
+    app = FastAPI(title="Nexus Mobile Gateway", version="0.1.0")
     store = store or create_default_store()
     used_signed_nonces: set[tuple[str, str]] = set()
 

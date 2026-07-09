@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10000000000000000000001 /* HermesMobileiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* HermesMobileiOSApp.swift */; };
+		A10000000000000000000001 /* NexusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* NexusApp.swift */; };
 		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* ContentView.swift */; };
 		A10000000000000000000003 /* MobileGatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* MobileGatewayClient.swift */; };
 		A10000000000000000000004 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* KeychainHelper.swift */; };
@@ -15,7 +15,7 @@
 
 /* Begin PBXFileReference section */
 		A10000000000000000000010 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10000000000000000000011 /* HermesMobileiOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesMobileiOSApp.swift; sourceTree = "<group>"; };
+		A10000000000000000000011 /* NexusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexusApp.swift; sourceTree = "<group>"; };
 		A10000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A10000000000000000000013 /* MobileGatewayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileGatewayClient.swift; sourceTree = "<group>"; };
 		A10000000000000000000015 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
@@ -44,7 +44,7 @@
 		A10000000000000000000031 /* iosApp */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000011 /* HermesMobileiOSApp.swift */,
+				A10000000000000000000011 /* NexusApp.swift */,
 				A10000000000000000000012 /* ContentView.swift */,
 				A10000000000000000000013 /* MobileGatewayClient.swift */,
 				A10000000000000000000015 /* KeychainHelper.swift */,
@@ -68,7 +68,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000000000000000000080 /* Build configuration list for PBXNativeTarget "iosApp" */;
 			buildPhases = (
-				A10000000000000000000021 /* Embed shared KMP framework */,
 				A10000000000000000000050 /* Sources */,
 				A10000000000000000000020 /* Frameworks */,
 				A10000000000000000000051 /* Resources */,
@@ -125,30 +124,12 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		A10000000000000000000021 /* Embed shared KMP framework */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Embed shared KMP framework";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "cd \"$SRCROOT/../..\"\n./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
 		A10000000000000000000050 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000001 /* HermesMobileiOSApp.swift in Sources */,
+				A10000000000000000000001 /* NexusApp.swift in Sources */,
 				A10000000000000000000002 /* ContentView.swift in Sources */,
 				A10000000000000000000003 /* MobileGatewayClient.swift in Sources */,
 				A10000000000000000000004 /* KeychainHelper.swift in Sources */,
@@ -258,10 +239,6 @@
 				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = E9M73F85W6;
 				ENABLE_PREVIEWS = YES;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
-				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iosApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Nexus";
@@ -270,11 +247,6 @@
 							INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 							IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 							MARKETING_VERSION = 0.1.0;
-							OTHER_LDFLAGS = (
-								"$(inherited)",
-								"-framework",
-								shared,
-							);
 							PRODUCT_BUNDLE_IDENTIFIER = com.rayjun.nexus;
 							PRODUCT_NAME = "$(TARGET_NAME)";
 							SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -292,10 +264,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = E9M73F85W6;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
-				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iosApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Nexus";
@@ -304,11 +272,6 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MARKETING_VERSION = 0.1.0;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-framework",
-					shared,
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.rayjun.nexus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

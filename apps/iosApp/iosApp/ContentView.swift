@@ -151,14 +151,6 @@ struct ContentView: View {
                     }
                 }
                 .cardStyle()
-
-                VStack(alignment: .leading, spacing: 12) {
-                    sectionHeader("SETUP FLOW", count: 3)
-                    capabilityRow(icon: "checkmark.circle", title: "Probe gateway", subtitle: "GET /mobile/v1/status", active: true)
-                    capabilityRow(icon: "number.circle", title: "Create pairing code", subtitle: "POST /mobile/v1/pair/start", active: true)
-                    capabilityRow(icon: "lock.circle", title: "Store device token", subtitle: "Local AppStorage for MVP", active: true)
-                }
-                .cardStyle()
             }
             .padding(.horizontal, 18)
             .padding(.top, 10)

@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct HermesMobileiOSApp: App {
+struct NexusApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

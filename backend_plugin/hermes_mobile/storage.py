@@ -96,7 +96,7 @@ class MockMobileStore:
                 session_id="sess_mock_contribution",
                 kind="file",
                 title="mobile-api.patch",
-                summary="Patch generated for Hermes Mobile API adapter changes.",
+                summary="Patch generated for mobile API adapter changes.",
                 mime_type="text/x-diff",
                 uri="file:///home/ubuntu/projects/hermes-mobile/mobile-api.patch",
                 size_bytes=18432,
