@@ -53,6 +53,8 @@ struct ContentView: View {
     @State private var isLoadingCron = false
     @State private var isLoadingApprovals = false
     @State private var isLoadingArtifacts = false
+    @State private var toast: ToastMessage?
+    @FocusState private var inputFocused: Bool
 
     private var isConnected: Bool {
         !deviceId.isEmpty && !deviceToken.isEmpty
@@ -66,6 +68,17 @@ struct ContentView: View {
                     appHome
                 } else {
                     connectView
+                }
+                if let toast {
+                    ToastView(message: toast)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(1000)
+                        .onAppear {
+                            Task {
+                                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                                await MainActor.run { self.toast = nil }
+                            }
+                        }
                 }
             }
         }
@@ -135,9 +148,6 @@ struct ContentView: View {
                             Text(isConnecting ? "Connecting" : "Connect and Enter")
                                 .font(.system(size: 15, weight: .semibold))
                             Spacer()
-                            Text("⌘↩")
-                                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.7))
                         }
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
@@ -191,7 +201,6 @@ struct ContentView: View {
                         editServerUrl = agent.baseUrl
                         isShowingEditServer = true
                     }
-                    statusStrip
                     segmentedRail
                     contentPanel
                 }
@@ -384,14 +393,6 @@ struct ContentView: View {
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
-    }
-
-    private var statusStrip: some View {
-        HStack(spacing: 8) {
-            statusChip(icon: "checkmark", text: "Gateway", color: NexusStyle.green)
-            statusChip(icon: "sparkles", text: "Agents", color: NexusStyle.text)
-            statusChip(icon: "clock", text: "Cron", color: NexusStyle.text)
-        }
     }
 
     private var segmentedRail: some View {
@@ -856,13 +857,39 @@ struct ContentView: View {
                             }
                             if isLoadingAgentMessages {
                                 loadingRows
-                            } else if agentMessages.isEmpty {
+                            } else if agentMessages.isEmpty && !isSendingAgentMessage {
                                 emptyState(title: "No messages yet", subtitle: "Send a message to start chatting with this agent.")
                                     .padding(.top, 40)
                             } else {
                                 ForEach(agentMessages) { msg in
                                     agentChatBubble(msg)
                                         .id(msg.id)
+                                        .contextMenu {
+                                            Button {
+                                                UIPasteboard.general.string = msg.content
+                                            } label: {
+                                                Label("Copy", systemImage: "doc.on.doc")
+                                            }
+                                        }
+                                }
+                                if isSendingAgentMessage {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            HStack(spacing: 4) {
+                                                TypingDots()
+                                                Text("Thinking…")
+                                                    .font(.system(size: 13, weight: .medium))
+                                                    .foregroundStyle(NexusStyle.subtleText)
+                                            }
+                                        }
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 12)
+                                        .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+                                        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 3)
+                                        Spacer(minLength: 52)
+                                    }
+                                    .id("loading_bubble")
                                 }
                             }
                         }
@@ -872,6 +899,11 @@ struct ContentView: View {
                     }
                     .onChange(of: agentMessages.last?.id) { lastId in
                         if let lastId { withAnimation { proxy.scrollTo(lastId, anchor: .bottom) } }
+                    }
+                    .onChange(of: isSendingAgentMessage) { sending in
+                        if sending {
+                            withAnimation { proxy.scrollTo("loading_bubble", anchor: .bottom) }
+                        }
                     }
                     .onAppear {
                         if let lastId = agentMessages.last?.id {
@@ -892,7 +924,6 @@ struct ContentView: View {
                     selectedPersistentAgent = nil
                 } label: {
                     Image(systemName: "chevron.left")
-                    Text("Agents")
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -908,27 +939,28 @@ struct ContentView: View {
     private func agentChatBubble(_ msg: PersistentAgentMessage) -> some View {
         let isUser = msg.role == "user"
         return HStack(alignment: .top, spacing: 10) {
-            if isUser { Spacer(minLength: 40) }
-            VStack(alignment: .leading, spacing: 4) {
+            if isUser { Spacer(minLength: 52) }
+            VStack(alignment: .leading, spacing: 6) {
                 MarkdownText(text: msg.content, textColor: isUser ? .white : NexusStyle.text)
                 HStack(spacing: 4) {
                     Spacer()
                     Text(formatTime(msg.createdAt))
-                        .font(.system(size: 10))
-                        .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.subtleText)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(isUser ? .white.opacity(0.6) : NexusStyle.subtleText)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(
                 isUser ? NexusStyle.blue : .white,
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(isUser ? Color.clear : NexusStyle.border, lineWidth: 1)
             )
-            if !isUser { Spacer(minLength: 40) }
+            .shadow(color: Color.black.opacity(isUser ? 0.10 : 0.05), radius: 8, x: 0, y: 3)
+            if !isUser { Spacer(minLength: 52) }
         }
     }
 
@@ -949,6 +981,31 @@ struct ContentView: View {
         return f
     }()
 
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static let isoFormatterNoFraction: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    private func relativeTime(_ iso: String) -> String {
+        let date = Self.isoFormatter.date(from: iso) ?? Self.isoFormatterNoFraction.date(from: iso)
+        guard let date else { return "" }
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60 { return "just now" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        if interval < 604800 { return "\(Int(interval / 86400))d ago" }
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f.string(from: date)
+    }
+
     private func agentInputBar(_ agent: PersistentAgent) -> some View {
         HStack(spacing: 10) {
             TextField("Message \(agent.name)…", text: $agentInputDraft, axis: .vertical)
@@ -956,10 +1013,11 @@ struct ContentView: View {
                 .foregroundStyle(NexusStyle.text)
                 .textInputAutocapitalization(.sentences)
                 .lineLimit(1...4)
+                .focused($inputFocused)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(inputFocused ? NexusStyle.blue : NexusStyle.border, lineWidth: inputFocused ? 2 : 1))
             Button {
                 Task { await sendAgentMsg(agent) }
             } label: {
@@ -1102,6 +1160,15 @@ struct ContentView: View {
                                 ForEach(Array(timeline.items.enumerated()), id: \.element.id) { index, item in
                                     chatBubble(item)
                                         .id(item.id)
+                                        .contextMenu {
+                                            if let body = item.text ?? item.markdown, !body.isEmpty {
+                                                Button {
+                                                    UIPasteboard.general.string = body
+                                                } label: {
+                                                    Label("Copy", systemImage: "doc.on.doc")
+                                                }
+                                            }
+                                        }
                                 }
                             } else {
                                 emptyState(title: "No messages yet", subtitle: "Send a message to start the conversation.")
@@ -1134,7 +1201,6 @@ struct ContentView: View {
                     selectedSession = nil
                 } label: {
                     Image(systemName: "chevron.left")
-                    Text("Sessions")
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -1157,10 +1223,11 @@ struct ContentView: View {
                 .foregroundStyle(NexusStyle.text)
                 .textInputAutocapitalization(.sentences)
                 .lineLimit(1...4)
+                .focused($inputFocused)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(inputFocused ? NexusStyle.blue : NexusStyle.border, lineWidth: inputFocused ? 2 : 1))
             Button {
                 Task { await appendGoal(to: session) }
             } label: {
@@ -1194,7 +1261,7 @@ struct ContentView: View {
         let body = item.text ?? item.markdown ?? ""
 
         return HStack(alignment: .top, spacing: 10) {
-            if isUser { Spacer(minLength: 40) }
+            if isUser { Spacer(minLength: 52) }
 
             if isThinking {
                 DisclosureGroup("Thinking") {
@@ -1222,7 +1289,7 @@ struct ContentView: View {
                 .tint(NexusStyle.subtleText)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(NexusStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(NexusStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     if body.isEmpty {
@@ -1256,20 +1323,30 @@ struct ContentView: View {
                         .foregroundStyle(NexusStyle.subtleText)
                         .tint(NexusStyle.subtleText)
                     }
+
+                    if !item.createdAt.isEmpty {
+                        HStack(spacing: 4) {
+                            Spacer()
+                            Text(formatTime(item.createdAt))
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(isUser ? .white.opacity(0.6) : NexusStyle.subtleText)
+                        }
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
                 .background(
                     isUser ? NexusStyle.blue : .white,
-                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(isUser ? Color.clear : NexusStyle.border, lineWidth: 1)
                 )
+                .shadow(color: Color.black.opacity(isUser ? 0.10 : 0.05), radius: 8, x: 0, y: 3)
             }
 
-            if !isUser && !isThinking { Spacer(minLength: 40) }
+            if !isUser && !isThinking { Spacer(minLength: 52) }
         }
     }
 
@@ -1371,9 +1448,19 @@ struct ContentView: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(NexusStyle.text)
                     .lineLimit(1)
-                Text(session.status)
-                    .font(.system(size: 12))
-                    .foregroundStyle(NexusStyle.muted)
+                HStack(spacing: 6) {
+                    Text(session.status.capitalized)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(session.status == "running" ? NexusStyle.green : NexusStyle.muted)
+                    if !session.updatedAt.isEmpty {
+                        Text("·")
+                            .font(.system(size: 11))
+                            .foregroundStyle(NexusStyle.subtleText)
+                        Text(relativeTime(session.updatedAt))
+                            .font(.system(size: 11))
+                            .foregroundStyle(NexusStyle.muted)
+                    }
+                }
             }
             Spacer()
             Image(systemName: "chevron.right")
@@ -1685,9 +1772,9 @@ struct ContentView: View {
             persistentAgents.insert(agent, at: 0)
             newAgentName = ""
             newAgentDesc = ""
-            statusMessage = "Created \(agent.name)"
+            toast = ToastMessage(text: "Created \(agent.name)", kind: .success)
         } catch {
-            statusMessage = error.localizedDescription
+            toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
         isLoadingAgents2 = false
     }
@@ -1697,9 +1784,9 @@ struct ContentView: View {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             try await client.deletePersistentAgent(id: agent.id, deviceToken: deviceToken)
             persistentAgents.removeAll { $0.id == agent.id }
-            statusMessage = "Deleted \(agent.name)"
+            toast = ToastMessage(text: "Deleted \(agent.name)", kind: .success)
         } catch {
-            statusMessage = error.localizedDescription
+            toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
     }
 
@@ -1714,7 +1801,7 @@ struct ContentView: View {
                 persistentAgents[idx] = updated
             }
             isShowingEditAgent = false
-            statusMessage = "Updated \(updated.name)"
+            toast = ToastMessage(text: "Updated \(updated.name)", kind: .success)
         } catch MobileGatewayError.badStatus(401) {
             await reconnect()
             do {
@@ -1724,12 +1811,12 @@ struct ContentView: View {
                     persistentAgents[idx] = updated
                 }
                 isShowingEditAgent = false
-                statusMessage = "Updated \(updated.name)"
+                toast = ToastMessage(text: "Updated \(updated.name)", kind: .success)
             } catch {
-                statusMessage = error.localizedDescription
+                toast = ToastMessage(text: error.localizedDescription, kind: .error)
             }
         } catch {
-            statusMessage = error.localizedDescription
+            toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
         isLoadingAgents2 = false
     }
@@ -1790,10 +1877,10 @@ struct ContentView: View {
                 }
                 agentMessages.append(response.assistantMessage)
             } catch {
-                statusMessage = error.localizedDescription
+                toast = ToastMessage(text: error.localizedDescription, kind: .error)
             }
         } catch {
-            statusMessage = error.localizedDescription
+            toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
         isSendingAgentMessage = false
     }
@@ -1860,7 +1947,7 @@ struct ContentView: View {
             sessions.removeAll { $0.id == response.session.id }
             sessions.insert(response.session, at: 0)
             selectedSection = "Sessions"
-            statusMessage = "Started \(response.session.title)"
+            toast = ToastMessage(text: "Started \(response.session.title)", kind: .success)
             isShowingComposer = false
             goalDraft = ""
         } catch {
@@ -1896,6 +1983,7 @@ struct ContentView: View {
             followUpDraft = ""
         } catch {
             timelineError = error.localizedDescription
+            toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
         isAppendingGoal = false
     }
@@ -1948,7 +2036,7 @@ private struct MarkdownText: View {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .codeBlock(let lang, let code):
-                    CodeBlockView(code: code, language: lang, textColor: textColor)
+                    CodeBlockView(code: code, language: lang)
                 case .heading(let level, let content):
                     Text(inlineAttributed(content))
                         .font(.system(size: level == 1 ? 20 : (level == 2 ? 17 : 15), weight: .bold))
@@ -1957,15 +2045,48 @@ private struct MarkdownText: View {
                     Text(inlineAttributed(content))
                         .font(.system(size: 15))
                         .foregroundStyle(textColor)
-                case .bullet(let content):
+                case .bullet(let content, let level):
                     HStack(alignment: .top, spacing: 6) {
-                        Text("•")
-                            .font(.system(size: 15))
-                            .foregroundStyle(textColor)
+                        if level > 0 {
+                            Text("◦")
+                                .font(.system(size: 15))
+                                .foregroundStyle(textColor.opacity(0.6))
+                                .frame(width: 14, alignment: .leading)
+                        } else {
+                            Text("•")
+                                .font(.system(size: 15))
+                                .foregroundStyle(textColor)
+                                .frame(width: 14, alignment: .leading)
+                        }
                         Text(inlineAttributed(content))
                             .font(.system(size: 15))
                             .foregroundStyle(textColor)
                     }
+                    .padding(.leading, CGFloat(level) * 16)
+                case .ordered(let index, let content):
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("\(index).")
+                            .font(.system(size: 15, weight: .medium, design: .monospaced))
+                            .foregroundStyle(textColor)
+                            .frame(width: 20, alignment: .leading)
+                        Text(inlineAttributed(content))
+                            .font(.system(size: 15))
+                            .foregroundStyle(textColor)
+                    }
+                case .quote(let content):
+                    HStack(alignment: .top, spacing: 8) {
+                        Rectangle()
+                            .fill(textColor.opacity(0.25))
+                            .frame(width: 3)
+                        Text(inlineAttributed(content))
+                            .font(.system(size: 14))
+                            .foregroundStyle(textColor.opacity(0.75))
+                            .italic()
+                    }
+                case .divider:
+                    Rectangle()
+                        .fill(textColor.opacity(0.12))
+                        .frame(height: 1)
                 }
             }
         }
@@ -1975,7 +2096,10 @@ private struct MarkdownText: View {
         case codeBlock(String, String)
         case heading(Int, String)
         case paragraph(String)
-        case bullet(String)
+        case bullet(String, Int)
+        case ordered(Int, String)
+        case quote(String)
+        case divider
     }
 
     private var blocks: [Block] {
@@ -2004,8 +2128,25 @@ private struct MarkdownText: View {
                 result.append(.heading(1, String(line.dropFirst(2))))
                 i += 1
             } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
-                result.append(.bullet(String(line.dropFirst(2))))
+                result.append(.bullet(String(line.dropFirst(2)), 0))
                 i += 1
+            } else if line.hasPrefix("  - ") || line.hasPrefix("  * ") {
+                result.append(.bullet(String(line.dropFirst(4)), 1))
+                i += 1
+            } else if let orderedMatch = matchOrdered(line) {
+                result.append(.ordered(orderedMatch.0, orderedMatch.1))
+                i += 1
+            } else if line.hasPrefix("> ") {
+                result.append(.quote(String(line.dropFirst(2))))
+                i += 1
+            } else if line.hasPrefix("---") || line.hasPrefix("***") {
+                if line.allSatisfy({ $0 == "-" || $0 == "*" }) {
+                    result.append(.divider)
+                    i += 1
+                } else {
+                    result.append(.paragraph(line))
+                    i += 1
+                }
             } else if line.trimmingCharacters(in: .whitespaces).isEmpty {
                 i += 1
             } else {
@@ -2014,6 +2155,18 @@ private struct MarkdownText: View {
             }
         }
         return result
+    }
+
+    private func matchOrdered(_ line: String) -> (Int, String)? {
+        var num = ""
+        var rest = line
+        while let first = rest.first, first.isNumber {
+            num.append(first)
+            rest = String(rest.dropFirst())
+        }
+        guard !num.isEmpty, rest.hasPrefix(". ") else { return nil }
+        guard let n = Int(num) else { return nil }
+        return (n, String(rest.dropFirst(2)))
     }
 
     private func inlineAttributed(_ s: String) -> AttributedString {
@@ -2055,6 +2208,23 @@ private struct MarkdownText: View {
                     result.append(AttributedString(before + "**" + remaining))
                     remaining = ""
                 }
+            } else if let range = remaining.range(of: "*") {
+                let before = String(remaining[..<range.lowerBound])
+                remaining = String(remaining[range.upperBound...])
+                if let closeRange = remaining.range(of: "*") {
+                    let italic = String(remaining[..<closeRange.lowerBound])
+                    remaining = String(remaining[closeRange.upperBound...])
+                    if !before.isEmpty {
+                        result.append(AttributedString(before))
+                    }
+                    var italicAttr = AttributedString(italic)
+                    italicAttr.font = .system(.body, design: .default).italic()
+                    italicAttr.foregroundColor = textColor
+                    result.append(italicAttr)
+                } else {
+                    result.append(AttributedString(before + "*" + remaining))
+                    remaining = ""
+                }
             } else {
                 result.append(AttributedString(remaining))
                 remaining = ""
@@ -2067,7 +2237,8 @@ private struct MarkdownText: View {
 private struct CodeBlockView: View {
     let code: String
     let language: String
-    let textColor: Color
+
+    @State private var copied = false
 
     private static let keywords: Set<String> = [
         "func", "let", "var", "if", "else", "for", "while", "return", "struct",
@@ -2086,20 +2257,37 @@ private struct CodeBlockView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if !language.isEmpty {
-                Text(language.uppercased())
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(1.5)
-                    .foregroundStyle(Color(red: 0.5, green: 0.55, blue: 0.65))
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
+            HStack {
+                if !language.isEmpty {
+                    Text(language.uppercased())
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .tracking(1.5)
+                        .foregroundStyle(Color(red: 0.5, green: 0.55, blue: 0.65))
+                }
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = code
+                    withAnimation(.easeInOut(duration: 0.2)) { copied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation(.easeInOut(duration: 0.2)) { copied = false }
+                    }
+                } label: {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(copied ? Color(red: 0.5, green: 0.85, blue: 0.55) : Color(red: 0.5, green: 0.55, blue: 0.65))
+                }
+                .buttonStyle(.plain)
             }
-            Text(highlightedCode)
-                .font(.system(size: 12, design: .monospaced))
-                .lineSpacing(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(highlightedCode)
+                    .font(.system(size: 12, design: .monospaced))
+                    .lineSpacing(3)
+                    .padding(12)
+            }
         }
         .background(Color(red: 0.12, green: 0.13, blue: 0.17), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
@@ -2190,11 +2378,69 @@ private struct CodeBlockView: View {
 private struct MarkdownText_Previews: PreviewProvider {
     static var previews: some View {
         VStack {
-            MarkdownText(text: "Hello `world` and **bold**", textColor: .black)
+            MarkdownText(text: "Hello `world` and **bold** and *italic*", textColor: .black)
             MarkdownText(text: "```swift\nfunc hello() {\n  print(\"hi\")\n}\n```", textColor: .black)
+            MarkdownText(text: "1. First\n2. Second\n3. Third", textColor: .black)
+            MarkdownText(text: "> A wise quote", textColor: .black)
         }
         .padding()
         .background(Color(red: 0.965, green: 0.976, blue: 0.992))
+    }
+}
+
+private struct ToastMessage: Identifiable {
+    let id = UUID()
+    let text: String
+    let kind: Kind
+
+    enum Kind {
+        case success, error
+    }
+}
+
+private struct ToastView: View {
+    let message: ToastMessage
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: message.kind == .success ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(message.kind == .success ? NexusStyle.green : .red)
+            Text(message.text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(NexusStyle.text)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.12), radius: 16, x: 0, y: 6)
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+    }
+}
+
+private struct TypingDots: View {
+    @State private var offset = 0.0
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(NexusStyle.subtleText)
+                    .frame(width: 5, height: 5)
+                    .offset(y: offset)
+                    .animation(
+                        .easeInOut(duration: 0.4)
+                            .repeatForever()
+                            .delay(Double(i) * 0.15),
+                        value: offset
+                    )
+            }
+        }
+        .onAppear { offset = -4 }
     }
 }
 

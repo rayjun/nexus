@@ -234,7 +234,7 @@ final class MobileGatewayClient {
 
     func updatePersistentAgent(id: String, name: String?, description: String?, icon: String?, deviceToken: String) async throws -> PersistentAgent {
         if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        return try await post("/mobile/v1/agents/persistent/\(id)", body: AgentUpdateBody(name: name, description: description, icon: icon), token: deviceToken)
+        return try await put("/mobile/v1/agents/persistent/\(id)", body: AgentUpdateBody(name: name, description: description, icon: icon), token: deviceToken)
     }
 
     func deletePersistentAgent(id: String, deviceToken: String) async throws {
@@ -283,6 +283,16 @@ final class MobileGatewayClient {
 
     private func post<T: Decodable, Body: Encodable>(_ path: String, body: Body, token: String? = nil, timeout: TimeInterval = 10) async throws -> T {
         var request = try request(path: path, method: "POST", timeout: timeout)
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(body)
+        return try await send(request)
+    }
+
+    private func put<T: Decodable, Body: Encodable>(_ path: String, body: Body, token: String? = nil, timeout: TimeInterval = 10) async throws -> T {
+        var request = try request(path: path, method: "PUT", timeout: timeout)
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

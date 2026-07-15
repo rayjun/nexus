@@ -9,8 +9,10 @@ A native iOS app for managing AI agents powered by Hermes Agent. Create persiste
 - **Real LLM Chat** — Messages route through Hermes API server (OpenAI-compatible endpoint), with session continuity via `X-Hermes-Session-Id`
 - **Session Timeline** — View Hermes session execution timelines with tool calls, thinking blocks, and results
 - **Inbox** — Active tasks (running Hermes sessions) and pending approvals
-- **Cron Jobs** — View scheduled tasks from `~/.hermes/cron/jobs.json`
-- **Code Highlighting** — Syntax highlighting for code blocks in chat (Swift, Python, Rust, Go, C/C++, Bash)
+- **Cron Jobs** — View scheduled tasks from Hermes
+- **Markdown Rendering** — Full markdown support in chat: headings, bold, italic, inline code, code blocks with syntax highlighting, ordered/unordered lists, blockquotes, dividers
+- **Code Highlighting** — Syntax highlighting for code blocks (Swift, Python, Rust, Go, C/C++, Bash) with copy button and horizontal scroll
+- **Toast Notifications** — Success/error feedback for all operations
 - **Secure Storage** — Device tokens stored in iOS Keychain
 - **Auto-Reconnect** — Automatically re-pairs with gateway on token expiration
 
@@ -18,43 +20,8 @@ A native iOS app for managing AI agents powered by Hermes Agent. Create persiste
 
 - iOS 16.0+
 - Xcode 15+ or Swift 5.9+
-- Hermes Agent with API server platform enabled (`hermes config set gateway.platforms.api_server.enabled true`)
-- `API_SERVER_KEY` set in `~/.hermes/.env`
-
-## Installation
-
-### Build & Run
-
-```bash
-cd apps/iosApp
-open iosApp.xcodeproj
-# In Xcode: select iosApp scheme, choose simulator, Run
-```
-
-### Start the Backend Gateway
-
-```bash
-# Install dependencies
-pip install fastapi uvicorn httpx pydantic pyyaml
-
-# Start mobile gateway
-HERMES_MOBILE_USE_STATE_DB=1 \
-  python -m uvicorn backend_plugin.hermes_mobile.server:app --host 0.0.0.0 --port 8765
-```
-
-### Enable Hermes API Server
-
-```bash
-hermes config set gateway.platforms.api_server.enabled true
-echo "API_SERVER_KEY=your-secret-key" >> ~/.hermes/.env
-hermes gateway restart
-```
-
-### Run Tests
-
-```bash
-python -m pytest tests/ -q
-```
+- Python 3.11+
+- Hermes Agent with API server platform enabled
 
 ## Architecture
 
@@ -72,13 +39,276 @@ python -m pytest tests/ -q
 ```
 
 - **iOS App** (SwiftUI): Connect view, agent server list, agent chat, session timeline, inbox
-- **Mobile Gateway** (FastAPI): Pairing, device auth, CRUD for agents/sessions/cron/approvals
-- **Hermes API Server**: OpenAI-compatible `/v1/chat/completions` endpoint with session continuity
+- **Mobile Gateway** (FastAPI, port 8765): Pairing, device auth, CRUD for agents/sessions/cron/approvals. Reads/writes Hermes `state.db` directly
+- **Hermes API Server** (port 8642): OpenAI-compatible `/v1/chat/completions` endpoint with session continuity. Part of Hermes Agent core
+
+## Server-Side Setup
+
+Nexus needs two backend services running: the **Mobile Gateway** (this repo) and the **Hermes API Server** (part of Hermes Agent).
+
+### 1. Install Hermes Agent
+
+```bash
+# Using pipx (recommended)
+pipx install hermes-agent
+
+# Or if already installed, ensure it's up to date
+pipx upgrade hermes-agent
+```
+
+Verify installation:
+
+```bash
+hermes --version
+```
+
+### 2. Enable Hermes API Server
+
+The API server is what Nexus calls to get LLM responses. It runs on port 8642 by default.
+
+```bash
+# Enable the API server platform
+hermes config set gateway.platforms.api_server.enabled true
+
+# Set the API server key (used for authentication)
+echo 'API_SERVER_KEY=your-secret-key-here' >> ~/.hermes/.env
+
+# Restart Hermes gateway to apply
+hermes gateway restart
+```
+
+Verify the API server is running:
+
+```bash
+# Should return 401 (auth required = server is up)
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8642/v1/models
+
+# With auth — should return model list
+curl http://127.0.0.1:8642/v1/models \
+  -H "Authorization: Bearer your-secret-key-here"
+```
+
+### 3. Set Up the Mobile Gateway
+
+The Mobile Gateway is a standalone FastAPI server included in this repo. It handles device pairing, agent CRUD, and proxies chat messages to the Hermes API server.
+
+#### 3a. Create a Python Virtual Environment
+
+```bash
+cd /path/to/hermes-mobile
+
+# Create venv (Python 3.11+)
+python3.11 -m venv /tmp/hermes-mobile-venv311
+
+# Activate and install dependencies
+source /tmp/hermes-mobile-venv311/bin/activate
+pip install fastapi uvicorn httpx pydantic pyyaml
+```
+
+Dependencies:
+| Package | Purpose |
+|---------|---------|
+| `fastapi` | Web framework for the gateway API |
+| `uvicorn` | ASGI server |
+| `httpx` | HTTP client to call Hermes API server |
+| `pydantic` | Data validation / models |
+| `pyyaml` | Config parsing (optional, for future use) |
+
+#### 3b. Start the Mobile Gateway
+
+```bash
+cd /path/to/hermes-mobile
+
+HERMES_MOBILE_USE_STATE_DB=1 \
+  /tmp/hermes-mobile-venv311/bin/python -m uvicorn \
+  backend_plugin.hermes_mobile.server:app \
+  --host 0.0.0.0 \
+  --port 8765
+```
+
+Environment variables:
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `HERMES_MOBILE_USE_STATE_DB` | **Yes** | — | Set to `1` to use Hermes `state.db` (real data). Without this, the gateway falls back to a mock store with no persistence |
+| `HERMES_MOBILE_STATE_DB` | No | `~/.hermes/state.db` | Override path to the Hermes state database |
+| `HERMES_MOBILE_USE_LIVE_APPROVALS` | No | — | Set to `1` to enable live approval forwarding |
+
+Verify the gateway is running:
+
+```bash
+curl http://127.0.0.1:8765/mobile/v1/status | python3 -m json.tool
+```
+
+Expected output:
+
+```json
+{
+  "node_id": "your-machine",
+  "node_name": "your-machine",
+  "status": "online",
+  "gateway_ready": true,
+  "hermes_version": "0.x.x",
+  "api_version": "1.0",
+  ...
+}
+```
+
+### 4. Run as a Background Service (Optional)
+
+To keep the gateway running after terminal close, use a process manager or launchd:
+
+#### Using nohup (quick):
+
+```bash
+HERMES_MOBILE_USE_STATE_DB=1 \
+  nohup /tmp/hermes-mobile-venv311/bin/python -m uvicorn \
+  backend_plugin.hermes_mobile.server:app \
+  --host 0.0.0.0 --port 8765 \
+  > /tmp/mobile-gateway.log 2>&1 &
+```
+
+#### Using launchd (persistent, auto-restart):
+
+Create `~/Library/LaunchAgents/com.rayjun.nexus.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.rayjun.nexus</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/tmp/hermes-mobile-venv311/bin/python</string>
+    <string>-m</string>
+    <string>uvicorn</string>
+    <string>backend_plugin.hermes_mobile.server:app</string>
+    <string>--host</string>
+    <string>0.0.0.0</string>
+    <string>--port</string>
+    <string>8765</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/path/to/hermes-mobile</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HERMES_MOBILE_USE_STATE_DB</key>
+    <string>1</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/mobile-gateway.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/mobile-gateway.log</string>
+</dict>
+</plist>
+```
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.rayjun.nexus.plist
+```
+
+### 5. Network Access
+
+The iOS app connects to the gateway over HTTP. Choose your setup:
+
+| Setup | Gateway URL | Use case |
+|-------|-------------|----------|
+| Simulator (local) | `http://127.0.0.1:8765` | Development on same Mac |
+| Tailscale | `http://100.x.x.x:8765` | Remote access, no port forwarding needed |
+| LAN IP | `http://192.168.x.x:8765` | Same Wi-Fi network |
+
+> **Tip**: Tailscale is the simplest remote option — it provides authentication through network access alone, no extra password or VPN needed.
+
+## iOS App Installation
+
+### Build & Run
+
+```bash
+cd apps/iosApp
+open iosApp.xcodeproj
+# In Xcode: select iosApp scheme, choose simulator, Run (⌘R)
+```
+
+### Install to Simulator (CLI)
+
+```bash
+cd /path/to/hermes-mobile
+
+# Build
+xcodebuild -project apps/iosApp/iosApp.xcodeproj \
+  -scheme iosApp \
+  -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  build
+
+# Install and launch
+APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-*/Build/Products/Debug-iphonesimulator/iosApp.app -maxdepth 0 | head -1)
+
+# Get simulator ID
+SIM_ID=$(xcrun simctl list devices booted | grep "iPhone" | grep -oE '[0-9A-F-]{36}')
+
+xcrun simctl install "$SIM_ID" "$APP_PATH"
+xcrun simctl launch "$SIM_ID" com.rayjun.nexus
+```
+
+## Troubleshooting
+
+### Agent chat returns "Internal Server Error"
+
+The mobile gateway process may be stale. Restart it:
+
+```bash
+# Find and kill old process
+ps aux | grep 'hermes_mobile.server' | grep -v grep | awk '{print $2}' | xargs kill
+
+# Restart with latest code
+cd /path/to/hermes-mobile
+HERMES_MOBILE_USE_STATE_DB=1 \
+  /tmp/hermes-mobile-venv311/bin/python -m uvicorn \
+  backend_plugin.hermes_mobile.server:app \
+  --host 0.0.0.0 --port 8765
+```
+
+### "API_SERVER_KEY not set in ~/.hermes/.env"
+
+The Hermes API server requires a key. Set it and restart:
+
+```bash
+echo 'API_SERVER_KEY=your-secret-key' >> ~/.hermes/.env
+hermes gateway restart
+```
+
+### "Hermes API server is not running"
+
+The API server on port 8642 is down. Start Hermes:
+
+```bash
+hermes gateway restart
+# Verify
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8642/v1/models
+```
+
+### Simulator can't connect to gateway
+
+The iOS Simulator shares the Mac's network, so `127.0.0.1:8765` works for local development. For a physical device, use Tailscale or your Mac's LAN IP.
+
+## Running Tests
+
+```bash
+cd /path/to/hermes-mobile
+python -m pytest tests/ -q
+```
 
 ## Tech Stack
 
 - **iOS**: SwiftUI, URLSession, Keychain (Security framework)
-- **Backend**: Python, FastAPI, SQLite (state.db), httpx
+- **Backend**: Python 3.11, FastAPI, SQLite (state.db), httpx
 - **LLM**: Hermes API server → any OpenAI-compatible model
 
 ## License

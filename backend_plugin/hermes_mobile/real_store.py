@@ -383,9 +383,18 @@ class StateDbMobileStore:
             "Authorization": f"Bearer {api_key}",
             "X-Hermes-Session-Id": hermes_session_id,
         }
+
+        messages: list[dict[str, str]] = []
+        system_parts: list[str] = [f"You are {agent_name}."]
+        if agent_desc:
+            system_parts.append(agent_desc)
+        system_parts.append("Stay in character. Be concise and direct.")
+        messages.append({"role": "system", "content": "\n".join(system_parts)})
+        messages.append({"role": "user", "content": content})
+
         body = {
             "model": "hermes-agent",
-            "messages": [{"role": "user", "content": content}],
+            "messages": messages,
             "max_tokens": 2000,
             "stream": False,
         }
