@@ -32,7 +32,7 @@ struct ContentView: View {
     @State private var persistentAgents: [PersistentAgent] = []
     @State private var selectedPersistentAgent: PersistentAgent?
     @State private var agentMessages: [PersistentAgentMessage] = []
-    @State private var isLoadingAgents2 = false
+    @State private var isLoadingPersistentAgents = false
     @State private var isLoadingAgentMessages = false
     @State private var agentInputDraft = ""
     @State private var isSendingAgentMessage = false
@@ -449,7 +449,7 @@ struct ContentView: View {
         case "Agents":
             VStack(alignment: .leading, spacing: 12) {
                 sectionHeader("AGENTS", count: persistentAgents.count)
-                if isLoadingAgents2 {
+                if isLoadingPersistentAgents {
                     loadingRows
                 } else if persistentAgents.isEmpty {
                     emptyState(title: "No agents yet", subtitle: "Tap + to create a persistent agent.")
@@ -490,7 +490,7 @@ struct ContentView: View {
             .cardStyle()
         default:
             VStack(alignment: .leading, spacing: 16) {
-                let activeSessions = sessions.filter { $0.status == "running" }
+                let activeSessions = sessions.filter { $0.status == "running" && !$0.id.hasPrefix("mobile-agent-") && !$0.id.hasPrefix("api_") && !$0.id.hasPrefix("api-") }
                 sectionHeader("ACTIVE TASKS", count: activeSessions.count)
                 if activeSessions.isEmpty {
                     emptyState(title: "No active tasks", subtitle: "Running Hermes sessions will appear here.")
@@ -707,10 +707,10 @@ struct ContentView: View {
                         }
                     } label: {
                         HStack(spacing: 8) {
-                            if isLoadingAgents2 {
+                            if isLoadingPersistentAgents {
                                 ProgressView().tint(.white)
                             }
-                            Text(isLoadingAgents2 ? "Creating…" : "Create Agent")
+                            Text(isLoadingPersistentAgents ? "Creating…" : "Create Agent")
                                 .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundStyle(.white)
@@ -718,7 +718,7 @@ struct ContentView: View {
                         .frame(height: 42)
                         .background(!newAgentName.isEmpty ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .disabled(newAgentName.isEmpty || isLoadingAgents2)
+                    .disabled(newAgentName.isEmpty || isLoadingPersistentAgents)
                 }
                 .padding(18)
             }
@@ -795,7 +795,7 @@ struct ContentView: View {
                         Task { await updatePersistentAgent() }
                     } label: {
                         HStack(spacing: 8) {
-                            if isLoadingAgents2 { ProgressView().tint(.white) }
+                            if isLoadingPersistentAgents { ProgressView().tint(.white) }
                             Text("Save")
                                 .font(.system(size: 15, weight: .semibold))
                         }
@@ -804,7 +804,7 @@ struct ContentView: View {
                         .frame(height: 42)
                         .background(!editAgentName.isEmpty ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .disabled(editAgentName.isEmpty || isLoadingAgents2)
+                    .disabled(editAgentName.isEmpty || isLoadingPersistentAgents)
                 }
                 .padding(18)
             }
@@ -1106,7 +1106,7 @@ struct ContentView: View {
 
                     HStack(spacing: 8) {
                         statusChip(icon: "server.rack", text: nodeName.isEmpty ? "Hermes" : nodeName, color: NexusStyle.text)
-                        statusChip(icon: "network", text: "Gateway", color: NexusStyle.green)
+                        statusChip(icon: "network", text: "Gateway", color: NexusStyle.blue)
                     }
 
                     Spacer()
@@ -1114,29 +1114,31 @@ struct ContentView: View {
                     Button {
                         Task { await createNewSession() }
                     } label: {
-                        HStack {
-                            if isCreatingSession {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: "arrow.up.circle.fill")
-                            }
-                            Text(isCreatingSession ? "Starting" : "Start session")
-                                .font(.system(size: 16, weight: .semibold))
-                            Spacer()
+                        HStack(spacing: 8) {
+                            if isCreatingSession { ProgressView().tint(.white) }
+                            Text(isCreatingSession ? "Starting…" : "Start Session")
+                                .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .frame(height: 50)
-                        .background(canCreateSession ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(canCreateSession ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .disabled(!canCreateSession || isCreatingSession)
                 }
                 .padding(18)
             }
+            .navigationTitle("New Session")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isShowingComposer = false }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isShowingComposer = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(NexusStyle.muted)
+                    }
                 }
             }
         }
@@ -1441,7 +1443,7 @@ struct ContentView: View {
     private func sessionRow(_ session: SessionSummary) -> some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(session.status == "running" ? NexusStyle.green : NexusStyle.subtleText)
+                .fill(session.status == "running" ? NexusStyle.blue : NexusStyle.subtleText)
                 .frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.title)
@@ -1451,7 +1453,7 @@ struct ContentView: View {
                 HStack(spacing: 6) {
                     Text(session.status.capitalized)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(session.status == "running" ? NexusStyle.green : NexusStyle.muted)
+                        .foregroundStyle(session.status == "running" ? NexusStyle.blue : NexusStyle.muted)
                     if !session.updatedAt.isEmpty {
                         Text("·")
                             .font(.system(size: 11))
@@ -1471,56 +1473,6 @@ struct ContentView: View {
         .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func inboxRow(icon: String, title: String, subtitle: String, tint: Color) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(NexusStyle.text)
-                Text(subtitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(NexusStyle.muted)
-            }
-            Spacer()
-        }
-        .padding(12)
-        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func capabilityRow(icon: String, title: String, subtitle: String, active: Bool) -> some View {
-        HStack(spacing: 11) {
-            Image(systemName: icon)
-                .foregroundStyle(active ? NexusStyle.blue : NexusStyle.muted)
-                .frame(width: 26, height: 26)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(NexusStyle.text)
-                Text(subtitle)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(NexusStyle.muted)
-            }
-            Spacer()
-        }
-        .padding(10)
-        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func placeholderPanel(title: String, icon: String, rows: [(String, String)]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(title, count: rows.count)
-            ForEach(rows, id: \.0) { row in
-                inboxRow(icon: icon, title: row.0, subtitle: row.1, tint: NexusStyle.blue)
-            }
-        }
-        .cardStyle()
-    }
-
     private func cronJobRow(_ job: CronJobInfo) -> some View {
         HStack(spacing: 11) {
             Image(systemName: "clock")
@@ -1536,7 +1488,7 @@ struct ContentView: View {
             }
             Spacer()
             if job.enabled {
-                Circle().fill(NexusStyle.green).frame(width: 8, height: 8)
+                Circle().fill(NexusStyle.blue).frame(width: 8, height: 8)
             } else {
                 Circle().fill(NexusStyle.subtleText).frame(width: 8, height: 8)
             }
@@ -1592,11 +1544,11 @@ struct ContentView: View {
         HStack(spacing: 11) {
             ZStack {
                 Circle()
-                    .fill(NexusStyle.green.opacity(0.12))
+                    .fill(NexusStyle.blue.opacity(0.12))
                     .frame(width: 32, height: 32)
                 Image(systemName: "play.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(NexusStyle.green)
+                    .foregroundStyle(NexusStyle.blue)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title.isEmpty ? session.id : session.title)
@@ -1610,7 +1562,7 @@ struct ContentView: View {
             }
             Spacer()
             Circle()
-                .fill(NexusStyle.green)
+                .fill(NexusStyle.blue)
                 .frame(width: 8, height: 8)
         }
         .padding(12)
@@ -1648,11 +1600,11 @@ struct ContentView: View {
     private func statusPill(text: String, positive: Bool) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(positive ? NexusStyle.green : NexusStyle.subtleText)
+                .fill(positive ? NexusStyle.blue : NexusStyle.subtleText)
                 .frame(width: 7, height: 7)
             Text(text)
                 .font(.system(size: 13))
-                .foregroundStyle(positive ? NexusStyle.green : NexusStyle.muted)
+                .foregroundStyle(positive ? NexusStyle.blue : NexusStyle.muted)
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
@@ -1692,7 +1644,7 @@ struct ContentView: View {
     private func loadHome() async {
         isLoadingAgents = true
         isLoadingSessions = true
-        isLoadingAgents2 = true
+        isLoadingPersistentAgents = true
         isLoadingCron = true
         isLoadingApprovals = true
         isLoadingArtifacts = true
@@ -1717,7 +1669,7 @@ struct ContentView: View {
             await reconnect()
             isLoadingAgents = false
             isLoadingSessions = false
-            isLoadingAgents2 = false
+            isLoadingPersistentAgents = false
             isLoadingCron = false
             isLoadingApprovals = false
             isLoadingArtifacts = false
@@ -1727,7 +1679,7 @@ struct ContentView: View {
         }
         isLoadingAgents = false
         isLoadingSessions = false
-        isLoadingAgents2 = false
+        isLoadingPersistentAgents = false
         isLoadingCron = false
         isLoadingApprovals = false
         isLoadingArtifacts = false
@@ -1765,7 +1717,7 @@ struct ContentView: View {
     private func createAgent() async {
         let name = newAgentName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        isLoadingAgents2 = true
+        isLoadingPersistentAgents = true
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             let agent = try await client.createPersistentAgent(name: name, description: newAgentDesc, deviceToken: deviceToken)
@@ -1776,7 +1728,7 @@ struct ContentView: View {
         } catch {
             toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
-        isLoadingAgents2 = false
+        isLoadingPersistentAgents = false
     }
 
     private func deleteAgent(_ agent: PersistentAgent) async {
@@ -1793,7 +1745,7 @@ struct ContentView: View {
     private func updatePersistentAgent() async {
         let name = editAgentName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        isLoadingAgents2 = true
+        isLoadingPersistentAgents = true
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             let updated = try await client.updatePersistentAgent(id: editAgentId, name: name, description: editAgentDesc, icon: editAgentIcon, deviceToken: deviceToken)
@@ -1818,7 +1770,7 @@ struct ContentView: View {
         } catch {
             toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
-        isLoadingAgents2 = false
+        isLoadingPersistentAgents = false
     }
 
     private func loadAgentMessages(_ agent: PersistentAgent) async {
@@ -2405,7 +2357,7 @@ private struct ToastView: View {
         HStack(spacing: 8) {
             Image(systemName: message.kind == .success ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .font(.system(size: 16))
-                .foregroundStyle(message.kind == .success ? NexusStyle.green : .red)
+                .foregroundStyle(message.kind == .success ? NexusStyle.blue : .red)
             Text(message.text)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(NexusStyle.text)
