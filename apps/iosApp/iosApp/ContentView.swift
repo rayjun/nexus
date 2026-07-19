@@ -938,29 +938,77 @@ struct ContentView: View {
 
     private func agentChatBubble(_ msg: PersistentAgentMessage) -> some View {
         let isUser = msg.role == "user"
+        let lineCount = msg.content.components(separatedBy: "\n").count
+        let shouldCollapse = !isUser && lineCount > 8
         return HStack(alignment: .top, spacing: 10) {
             if isUser { Spacer(minLength: 52) }
-            VStack(alignment: .leading, spacing: 6) {
-                MarkdownText(text: msg.content, textColor: isUser ? .white : NexusStyle.text)
+            VStack(alignment: .leading, spacing: 4) {
+                if shouldCollapse && !msgCollapsed(msg.id) {
+                    MarkdownText(text: String(msg.content.prefix(200)) + "...", textColor: isUser ? .white : NexusStyle.text)
+                    Button {
+                        toggleCollapse(msg.id)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                            Text("Show full message")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.blue)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    MarkdownText(text: msg.content, textColor: isUser ? .white : NexusStyle.text)
+                    if shouldCollapse {
+                        Button {
+                            toggleCollapse(msg.id)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.up")
+                                    .font(.system(size: 9, weight: .semibold))
+                                Text("Collapse")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.blue)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 HStack(spacing: 4) {
                     Spacer()
                     Text(formatTime(msg.createdAt))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
                         .foregroundStyle(isUser ? .white.opacity(0.6) : NexusStyle.subtleText)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(
                 isUser ? NexusStyle.blue : .white,
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(isUser ? Color.clear : NexusStyle.border, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(isUser ? 0.10 : 0.05), radius: 8, x: 0, y: 3)
+            .shadow(color: Color.black.opacity(isUser ? 0.10 : 0.05), radius: 6, x: 0, y: 2)
             if !isUser { Spacer(minLength: 52) }
+        }
+    }
+
+    @State private var collapsedMsgIds: Set<String> = []
+
+    private func msgCollapsed(_ id: String) -> Bool {
+        collapsedMsgIds.contains(id)
+    }
+
+    private func toggleCollapse(_ id: String) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if collapsedMsgIds.contains(id) {
+                collapsedMsgIds.remove(id)
+            } else {
+                collapsedMsgIds.insert(id)
+            }
         }
     }
 
@@ -1261,6 +1309,8 @@ struct ContentView: View {
         let isUser = item.type == "user_goal"
         let isThinking = item.type == "thinking_block"
         let body = item.text ?? item.markdown ?? ""
+        let lineCount = body.components(separatedBy: "\n").count
+        let shouldCollapse = !isUser && !isThinking && lineCount > 8
 
         return HStack(alignment: .top, spacing: 10) {
             if isUser { Spacer(minLength: 52) }
@@ -1286,42 +1336,78 @@ struct ContentView: View {
                         }
                     }
                 }
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(NexusStyle.subtleText)
                 .tint(NexusStyle.subtleText)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(NexusStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(NexusStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    if body.isEmpty {
-                        Text(timelineTitle(item))
-                            .font(.system(size: 15))
-                            .foregroundStyle(isUser ? .white : NexusStyle.text)
+                VStack(alignment: .leading, spacing: 4) {
+                    if shouldCollapse && !msgCollapsed(item.id) {
+                        if body.isEmpty {
+                            Text(timelineTitle(item))
+                                .font(.system(size: 14))
+                                .foregroundStyle(isUser ? .white : NexusStyle.text)
+                        } else {
+                            MarkdownText(text: String(body.prefix(200)) + "...", textColor: isUser ? .white : NexusStyle.text)
+                        }
+                        Button {
+                            toggleCollapse(item.id)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 9, weight: .semibold))
+                                Text("Show full message")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.blue)
+                        }
+                        .buttonStyle(.plain)
                     } else {
-                        MarkdownText(text: body, textColor: isUser ? .white : NexusStyle.text)
+                        if body.isEmpty {
+                            Text(timelineTitle(item))
+                                .font(.system(size: 14))
+                                .foregroundStyle(isUser ? .white : NexusStyle.text)
+                        } else {
+                            MarkdownText(text: body, textColor: isUser ? .white : NexusStyle.text)
+                        }
+                        if shouldCollapse {
+                            Button {
+                                toggleCollapse(item.id)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.up")
+                                        .font(.system(size: 9, weight: .semibold))
+                                    Text("Collapse")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.blue)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
 
                     if let calls = item.toolCalls, !calls.isEmpty {
                         DisclosureGroup("Tool calls (\(calls.count))") {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: 3) {
                                 ForEach(calls.prefix(8)) { call in
                                     HStack(spacing: 5) {
                                         Circle()
                                             .fill(call.status == "failed" ? .red : (call.status == "running" ? NexusStyle.blue : NexusStyle.subtleText))
-                                            .frame(width: 5, height: 5)
+                                            .frame(width: 4, height: 4)
                                         Text(call.summary)
-                                            .font(.system(size: 11, design: .monospaced))
+                                            .font(.system(size: 10, design: .monospaced))
                                             .foregroundStyle(call.status == "failed" ? .red : NexusStyle.muted)
                                             .lineLimit(2)
                                     }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 }
                             }
                         }
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(NexusStyle.subtleText)
                         .tint(NexusStyle.subtleText)
                     }
@@ -1330,22 +1416,22 @@ struct ContentView: View {
                         HStack(spacing: 4) {
                             Spacer()
                             Text(formatTime(item.createdAt))
-                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
                                 .foregroundStyle(isUser ? .white.opacity(0.6) : NexusStyle.subtleText)
                         }
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 11)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
                 .background(
                     isUser ? NexusStyle.blue : .white,
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(isUser ? Color.clear : NexusStyle.border, lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(isUser ? 0.10 : 0.05), radius: 8, x: 0, y: 3)
+                .shadow(color: Color.black.opacity(isUser ? 0.10 : 0.05), radius: 6, x: 0, y: 2)
             }
 
             if !isUser && !isThinking { Spacer(minLength: 52) }
@@ -1991,38 +2077,38 @@ private struct MarkdownText: View {
                     CodeBlockView(code: code, language: lang)
                 case .heading(let level, let content):
                     Text(inlineAttributed(content))
-                        .font(.system(size: level == 1 ? 20 : (level == 2 ? 17 : 15), weight: .bold))
+                        .font(.system(size: level == 1 ? 17 : (level == 2 ? 15 : 14), weight: .bold))
                         .foregroundStyle(textColor)
                 case .paragraph(let content):
                     Text(inlineAttributed(content))
-                        .font(.system(size: 15))
+                        .font(.system(size: 14))
                         .foregroundStyle(textColor)
                 case .bullet(let content, let level):
                     HStack(alignment: .top, spacing: 6) {
                         if level > 0 {
                             Text("◦")
-                                .font(.system(size: 15))
+                                .font(.system(size: 14))
                                 .foregroundStyle(textColor.opacity(0.6))
                                 .frame(width: 14, alignment: .leading)
                         } else {
                             Text("•")
-                                .font(.system(size: 15))
+                                .font(.system(size: 14))
                                 .foregroundStyle(textColor)
                                 .frame(width: 14, alignment: .leading)
                         }
                         Text(inlineAttributed(content))
-                            .font(.system(size: 15))
+                            .font(.system(size: 14))
                             .foregroundStyle(textColor)
                     }
                     .padding(.leading, CGFloat(level) * 16)
                 case .ordered(let index, let content):
                     HStack(alignment: .top, spacing: 6) {
                         Text("\(index).")
-                            .font(.system(size: 15, weight: .medium, design: .monospaced))
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
                             .foregroundStyle(textColor)
                             .frame(width: 20, alignment: .leading)
                         Text(inlineAttributed(content))
-                            .font(.system(size: 15))
+                            .font(.system(size: 14))
                             .foregroundStyle(textColor)
                     }
                 case .quote(let content):
@@ -2031,7 +2117,7 @@ private struct MarkdownText: View {
                             .fill(textColor.opacity(0.25))
                             .frame(width: 3)
                         Text(inlineAttributed(content))
-                            .font(.system(size: 14))
+                            .font(.system(size: 13))
                             .foregroundStyle(textColor.opacity(0.75))
                             .italic()
                     }
@@ -2191,6 +2277,7 @@ private struct CodeBlockView: View {
     let language: String
 
     @State private var copied = false
+    @State private var expanded = false
 
     private static let keywords: Set<String> = [
         "func", "let", "var", "if", "else", "for", "while", "return", "struct",
@@ -2207,13 +2294,26 @@ private struct CodeBlockView: View {
         "template", "virtual", "new", "delete", "this", "nullptr",
     ]
 
+    private var lineCount: Int {
+        code.components(separatedBy: "\n").count
+    }
+
+    private var shouldCollapse: Bool {
+        lineCount > 12
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 if !language.isEmpty {
                     Text(language.uppercased())
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
                         .tracking(1.5)
+                        .foregroundStyle(Color(red: 0.5, green: 0.55, blue: 0.65))
+                }
+                if shouldCollapse {
+                    Text("\(lineCount) lines")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color(red: 0.5, green: 0.55, blue: 0.65))
                 }
                 Spacer()
@@ -2225,23 +2325,42 @@ private struct CodeBlockView: View {
                     }
                 } label: {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(copied ? Color(red: 0.5, green: 0.85, blue: 0.55) : Color(red: 0.5, green: 0.55, blue: 0.65))
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(highlightedCode)
-                    .font(.system(size: 12, design: .monospaced))
-                    .lineSpacing(3)
-                    .padding(12)
+                    .font(.system(size: 11, design: .monospaced))
+                    .lineSpacing(2)
+                    .padding(10)
+            }
+            .frame(maxHeight: shouldCollapse && !expanded ? 180 : .infinity)
+            .clipped()
+
+            if shouldCollapse {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(expanded ? "Collapse" : "Show all \(lineCount) lines")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(Color(red: 0.5, green: 0.55, blue: 0.65))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 5)
+                }
+                .buttonStyle(.plain)
             }
         }
-        .background(Color(red: 0.12, green: 0.13, blue: 0.17), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color(red: 0.12, green: 0.13, blue: 0.17), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var highlightedCode: AttributedString {
