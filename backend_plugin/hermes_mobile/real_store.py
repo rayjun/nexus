@@ -18,14 +18,15 @@ class StateDbMobileStore:
         self.device_tokens: dict[str, DeviceInfo] = {}
         self.approval_audit_log: list[dict[str, object]] = []
         now = datetime.now(UTC)
+        cfg = self._read_config()
         self.agents: dict[str, AgentInfo] = {
             "agent_vps": AgentInfo(
                 id="agent_vps",
                 name="VPS Hermes",
                 base_url="http://127.0.0.1:8765",
                 status="online",
-                profile="default",
-                model="gpt-5.5",
+                profile=cfg["profile"],
+                model=cfg["model"],
                 created_at=now,
                 last_seen_at=now,
             )
@@ -557,9 +558,8 @@ class StateDbMobileStore:
                 return job
         return None
 
-    def get_status(self) -> "StatusResponse | None":
+    def _read_config(self) -> dict[str, str]:
         config_path = Path.home() / ".hermes" / "config.yaml"
-        base_url = "unknown"
         model_name = "unknown"
         provider = "unknown"
         profile = "default"
@@ -568,12 +568,15 @@ class StateDbMobileStore:
                 import yaml
                 cfg = yaml.safe_load(config_path.read_text())
                 m = cfg.get("model", {})
-                base_url = m.get("base_url", base_url)
                 model_name = m.get("default", model_name)
                 provider = m.get("provider", provider)
                 profile = cfg.get("profile", profile)
             except Exception:
                 pass
+        return {"model": model_name, "provider": provider, "profile": profile}
+
+    def get_status(self) -> "StatusResponse | None":
+        cfg = self._read_config()
         import socket
         try:
             node_name = socket.gethostname()
@@ -586,8 +589,8 @@ class StateDbMobileStore:
             gateway_ready=True,
             hermes_version="0.x.x",
             api_version="1.0",
-            profile=profile,
-            model={"provider": provider, "model": model_name},
+            profile=cfg["profile"],
+            model={"provider": cfg["provider"], "model": cfg["model"]},
             features={
                 "events": True,
                 "approvals": True,
