@@ -209,12 +209,14 @@ def test_state_db_store_persists_managed_agents(tmp_path: Path):
 
     agent = first.add_agent(AgentRequest(name="Lab Hermes", base_url="http://lab.local:8765"))
 
+    import socket
+    expected_name = socket.gethostname()
     second = StateDbMobileStore(db_path, agents_path=agents_path)
-    assert [item.name for item in second.list_agents()] == ["VPS Hermes", "Lab Hermes"]
+    assert [item.name for item in second.list_agents()] == [expected_name, "Lab Hermes"]
     assert second.remove_agent(agent.id) is True
 
     third = StateDbMobileStore(db_path, agents_path=agents_path)
-    assert [item.name for item in third.list_agents()] == ["VPS Hermes"]
+    assert [item.name for item in third.list_agents()] == [expected_name]
 
 
 def test_server_default_store_can_use_state_db_env(tmp_path: Path, monkeypatch):

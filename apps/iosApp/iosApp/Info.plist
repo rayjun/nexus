@@ -34,21 +34,9 @@
         <true/>
         <key>NSAllowsLocalNetworking</key>
         <true/>
-        <key>NSExceptionDomains</key>
-        <dict>
-            <key>100.91.132.51</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <true/>
-                <key>NSExceptionMinimumTLSVersion</key>
-                <string>TLSv1.0</string>
-                <key>NSIncludesSubdomains</key>
-                <true/>
-            </dict>
-        </dict>
     </dict>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Hermes Mobile connects to your local or Tailscale Hermes Gateway.</string>
+    <string>Nexus connects to your local or Tailscale Hermes Gateway.</string>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UISupportedInterfaceOrientations</key>

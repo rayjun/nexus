@@ -239,7 +239,7 @@ def test_agents_endpoint_can_add_and_remove_managed_agents():
 
     initial = client.get("/mobile/v1/agents", headers=headers)
     assert initial.status_code == 200
-    assert initial.json()["agents"][0]["name"] == "VPS Hermes"
+    assert initial.json()["agents"][0]["name"] == "Local Hermes"
 
     created = client.post(
         "/mobile/v1/agents",
@@ -252,12 +252,12 @@ def test_agents_endpoint_can_add_and_remove_managed_agents():
     assert body["status"] == "offline"
 
     listed = client.get("/mobile/v1/agents", headers=headers).json()["agents"]
-    assert [agent["name"] for agent in listed] == ["VPS Hermes", "Local Hermes"]
+    assert [agent["name"] for agent in listed] == ["Local Hermes", "Local Hermes"]
 
     deleted = client.delete(f"/mobile/v1/agents/{body['id']}", headers=headers)
     assert deleted.status_code == 204
     listed_after_delete = client.get("/mobile/v1/agents", headers=headers).json()["agents"]
-    assert [agent["name"] for agent in listed_after_delete] == ["VPS Hermes"]
+    assert [agent["name"] for agent in listed_after_delete] == ["Local Hermes"]
 
 
 def test_revoke_device_invalidates_its_bearer_token():
@@ -296,7 +296,7 @@ def test_pending_approvals_endpoint_returns_structured_approval():
     assert approval["kind"] == "terminal_command"
     assert approval["risk"] == "high"
     assert approval["status"] == "pending"
-    assert approval["details"]["repo"] == "rayjun/hermes-agent"
+    assert approval["details"]["repo"] == "user/hermes-agent"
 
 
 def test_approve_endpoint_resolves_pending_approval():

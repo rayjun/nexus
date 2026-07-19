@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum KeychainHelper {
-    private static let service = "com.rayjun.nexus"
+    private static let service = Bundle.main.bundleIdentifier ?? "com.rayjun.nexus"
 
     static func save(_ value: String, key: String) {
         let data = Data(value.utf8)

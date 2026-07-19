@@ -74,15 +74,20 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
         store_status = store.get_status() if hasattr(store, "get_status") else None
         if store_status:
             return store_status
+        import socket
+        try:
+            node_name = socket.gethostname()
+        except Exception:
+            node_name = "Hermes"
         return StatusResponse(
-            node_id="node_mock_vps",
-            node_name="VPS Hermes",
+            node_id=node_name,
+            node_name=node_name,
             status="online",
             gateway_ready=True,
             hermes_version="0.x.x",
             api_version="1.0",
             profile="default",
-            model={"provider": "openai-codex", "model": "gpt-5.5"},
+            model={"provider": "unknown", "model": "unknown"},
             features={
                 "events": True,
                 "approvals": True,

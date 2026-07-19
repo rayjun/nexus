@@ -71,8 +71,8 @@ class MockMobileStore:
                 reason="The requested change passed tests and needs to be pushed for review.",
                 details={
                     "command": "git push origin fix/mobile-api",
-                    "cwd": "/home/ubuntu/projects/hermes-agent",
-                    "repo": "rayjun/hermes-agent",
+                    "cwd": "/home/user/projects/hermes-agent",
+                    "repo": "user/hermes-agent",
                     "branch": "fix/mobile-api",
                     "files_changed": 3,
                     "tests": "128 passed",
@@ -98,9 +98,9 @@ class MockMobileStore:
                 title="mobile-api.patch",
                 summary="Patch generated for mobile API adapter changes.",
                 mime_type="text/x-diff",
-                uri="file:///home/ubuntu/projects/hermes-mobile/mobile-api.patch",
+                uri="file:///home/user/projects/hermes-mobile/mobile-api.patch",
                 size_bytes=18432,
-                metadata={"language": "diff", "repo": "rayjun/hermes-mobile"},
+                metadata={"language": "diff", "repo": "user/hermes-mobile"},
                 created_at=created_at,
             ),
             "art_mock_log": Artifact(
@@ -110,7 +110,7 @@ class MockMobileStore:
                 title="gateway-smoke.log",
                 summary="Smoke test output for /mobile/v1 gateway endpoints.",
                 mime_type="text/plain",
-                uri="file:///home/ubuntu/projects/hermes-mobile/gateway-smoke.log",
+                uri="file:///home/user/projects/hermes-mobile/gateway-smoke.log",
                 size_bytes=2048,
                 metadata={"command": "pytest tests/test_mobile_gateway_mock.py"},
                 created_at=created_at,
@@ -198,11 +198,11 @@ class MockMobileStore:
         self.agents: dict[str, AgentInfo] = {
             "agent_vps": AgentInfo(
                 id="agent_vps",
-                name="VPS Hermes",
+                name="Local Hermes",
                 base_url="http://127.0.0.1:8765",
                 status="online",
                 profile="default",
-                model="gpt-5.5",
+                model="unknown",
                 created_at=created_at,
                 last_seen_at=created_at,
             )

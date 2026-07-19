@@ -19,11 +19,15 @@ class StateDbMobileStore:
         self.approval_audit_log: list[dict[str, object]] = []
         now = datetime.now(UTC)
         cfg = self._read_config()
+        import os
+        import socket
+        base_url = os.environ.get("HERMES_MOBILE_BASE_URL", "http://127.0.0.1:8765")
+        agent_name = os.environ.get("HERMES_MOBILE_AGENT_NAME") or socket.gethostname()
         self.agents: dict[str, AgentInfo] = {
             "agent_vps": AgentInfo(
                 id="agent_vps",
-                name="VPS Hermes",
-                base_url="http://127.0.0.1:8765",
+                name=agent_name,
+                base_url=base_url,
                 status="online",
                 profile=cfg["profile"],
                 model=cfg["model"],
@@ -43,7 +47,7 @@ class StateDbMobileStore:
             pairing_id=pairing_id,
             code=code,
             expires_at=expires_in(10),
-            qr_payload=f"hermes://pair?url=http://127.0.0.1:8765&code={code}&fingerprint=state-db",
+            qr_payload=f"hermes://pair?url={self.agents['agent_vps'].base_url}&code={code}&fingerprint=state-db",
         )
         self.pending_pairings[code] = response
         return response
@@ -378,7 +382,8 @@ class StateDbMobileStore:
         if not api_key:
             return "[Error: API_SERVER_KEY not set in ~/.hermes/.env]", None
 
-        url = "http://127.0.0.1:8642/v1/chat/completions"
+        import os
+        api_url = os.environ.get("HERMES_API_URL", "http://127.0.0.1:8642/v1/chat/completions")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
@@ -401,7 +406,7 @@ class StateDbMobileStore:
         }
 
         try:
-            resp = httpx.post(url, headers=headers, json=body, timeout=120)
+            resp = httpx.post(api_url, headers=headers, json=body, timeout=120)
             resp.raise_for_status()
             data = resp.json()
             assistant_content = data["choices"][0]["message"]["content"].strip()
@@ -583,7 +588,7 @@ class StateDbMobileStore:
         except Exception:
             node_name = "Hermes"
         return StatusResponse(
-            node_id=socket.gethostname() if True else "node",
+            node_id=node_name,
             node_name=node_name,
             status="online",
             gateway_ready=True,
