@@ -1999,8 +1999,8 @@ struct ContentView: View {
 
     private func makeClient() -> MobileGatewayClient {
         let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
-        client.onUnauthorized = { [weak self] in
-            await self?.reconnect()
+        client.onUnauthorized = {
+            await self.reconnect()
         }
         return client
     }
