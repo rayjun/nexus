@@ -228,5 +228,10 @@ def test_server_default_store_can_use_state_db_env(tmp_path: Path, monkeypatch):
 
     store = create_default_store()
 
-    assert isinstance(store, StateDbMobileStore)
-    assert store.list_sessions()[0].id == "sess_real"
+    # LiveApprovalMobileStore wraps StateDbMobileStore by default
+    if hasattr(store, 'base_store'):
+        assert isinstance(store.base_store, StateDbMobileStore)
+        assert store.base_store.list_sessions()[0].id == "sess_real"
+    else:
+        assert isinstance(store, StateDbMobileStore)
+        assert store.list_sessions()[0].id == "sess_real"

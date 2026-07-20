@@ -8,6 +8,7 @@ from backend_plugin.hermes_mobile.live_approvals import HermesApprovalBridge, Li
 from backend_plugin.hermes_mobile.models import ApprovalStatus
 from backend_plugin.hermes_mobile.server import create_default_store
 from backend_plugin.hermes_mobile.storage import MockMobileStore
+from backend_plugin.hermes_mobile.real_store import StateDbMobileStore
 
 
 class FakeApprovalEntry:
@@ -110,7 +111,18 @@ def test_default_store_enables_live_approval_bridge_when_flag_is_set(monkeypatch
     package = ModuleType("tools")
     monkeypatch.setitem(sys.modules, "tools", package)
     monkeypatch.setitem(sys.modules, "tools.approval", module)
-    monkeypatch.setenv("HERMES_MOBILE_USE_LIVE_APPROVALS", "1")
+
+    # LiveApprovalMobileStore is now default for StateDbMobileStore
+    # Use a temp state.db to get StateDbMobileStore as base
+    import tempfile, sqlite3
+    from pathlib import Path
+    tmp = Path(tempfile.mkdtemp()) / "state.db"
+    con = sqlite3.connect(tmp)
+    con.execute("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, title TEXT, started_at REAL, ended_at REAL, end_reason TEXT, message_count INTEGER DEFAULT 0, archived INTEGER DEFAULT 0)")
+    con.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, timestamp REAL, active INTEGER DEFAULT 1, compacted INTEGER DEFAULT 0)")
+    con.commit()
+    con.close()
+    monkeypatch.setenv("HERMES_MOBILE_STATE_DB", str(tmp))
 
     store = create_default_store()
 

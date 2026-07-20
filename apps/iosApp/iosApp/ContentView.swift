@@ -89,6 +89,7 @@ struct ContentView: View {
         .preferredColorScheme(.light)
         .onAppear {
             gatewayInput = gatewayBaseUrl
+            loadFromCache()
             if isConnected {
                 Task { await loadHome() }
             } else {
@@ -187,12 +188,6 @@ struct ContentView: View {
                 .sheet(isPresented: $isShowingEditServer) {
                     editServerSheet
                 }
-        } else if agents.count == 1, !isLoadingAgents {
-            serverDashboard(agents[0])
-                .sheet(isPresented: $isShowingEditServer) {
-                    editServerSheet
-                }
-                .onAppear { selectedAgentServer = agents[0] }
         } else {
             agentServerList
         }
@@ -1956,6 +1951,20 @@ struct ContentView: View {
         cronJobs = try await cronResult
         approvalList = try await approvalsResult
         artifactList = try await artifactsResult
+        cacheToDisk()
+    }
+
+    private func cacheToDisk() {
+        let cache: [String: Any] = [
+            "nodeName": nodeName,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        UserDefaults.standard.set(cache, forKey: "nexus_cache")
+    }
+
+    private func loadFromCache() {
+        guard let cache = UserDefaults.standard.dictionary(forKey: "nexus_cache") else { return }
+        if let name = cache["nodeName"] as? String { nodeName = name }
     }
 
     private func reconnect() async {

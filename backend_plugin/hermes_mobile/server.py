@@ -60,7 +60,7 @@ def create_default_store() -> MobileStore:
             base_store = StateDbMobileStore(default_state)
         else:
             base_store = MockMobileStore()
-    if os.getenv("HERMES_MOBILE_USE_LIVE_APPROVALS") == "1":
+    if isinstance(base_store, StateDbMobileStore):
         return LiveApprovalMobileStore(base_store)
     return base_store
 
