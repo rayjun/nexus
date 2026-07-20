@@ -286,8 +286,10 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 40)
                 } else {
-                    ForEach(agents) { agent in
-                        agentServerCard(agent)
+                    LazyVStack(spacing: 14) {
+                        ForEach(agents) { agent in
+                            agentServerCard(agent)
+                        }
                     }
                 }
 
