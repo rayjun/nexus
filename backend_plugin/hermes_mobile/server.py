@@ -70,6 +70,13 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
     store = store or create_default_store()
     used_signed_nonces: set[tuple[str, str]] = set()
     pair_attempts: dict[str, list[float]] = {}
+    import logging
+    logger = logging.getLogger("nexus_gateway")
+    logger.setLevel(logging.INFO)
+
+    @app.get("/health")
+    def health() -> dict:
+        return {"status": "ok", "service": "nexus-gateway", "version": "0.1.0"}
 
     @app.get("/mobile/v1/status", response_model=StatusResponse)
     def status() -> StatusResponse:
@@ -179,6 +186,8 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
 
     @app.post("/mobile/v1/agents", response_model=AgentInfo)
     def add_agent(request: AgentRequest, device_id: str = Depends(require_device)) -> AgentInfo:
+        if len(request.name) > 100 or len(request.base_url) > 500:
+            raise HTTPException(status_code=422, detail="input_too_long")
         return store.add_agent(request)
 
     @app.put("/mobile/v1/agents/{agent_id}", response_model=AgentInfo)
@@ -233,6 +242,8 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
 
     @app.post("/mobile/v1/agents/persistent/{agent_id}/messages", response_model=AgentMessageResponse)
     def send_agent_message(agent_id: str, request: AgentMessageRequest, device_id: str = Depends(require_device)) -> AgentMessageResponse:
+        if len(request.content) > 10000:
+            raise HTTPException(status_code=422, detail="message_too_long")
         if hasattr(store, "send_agent_message"):
             try:
                 user_msg, assistant_msg = store.send_agent_message(agent_id, request.content)
@@ -298,11 +309,15 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
 
     @app.post("/mobile/v1/sessions", response_model=GoalResponse)
     def create_session(request: GoalRequest, device_id: str = Depends(require_device)) -> GoalResponse:
+        if len(request.goal) > 10000:
+            raise HTTPException(status_code=422, detail="goal_too_long")
         session, timeline = store.create_session_from_goal(request.goal)
         return GoalResponse(session=session, timeline=timeline)
 
     @app.post("/mobile/v1/sessions/{session_id}/goals", response_model=GoalResponse)
     def append_goal(session_id: str, request: GoalRequest, device_id: str = Depends(require_device)) -> GoalResponse:
+        if len(request.goal) > 10000:
+            raise HTTPException(status_code=422, detail="goal_too_long")
         result = store.append_goal(session_id, request.goal)
         if not result:
             raise HTTPException(status_code=404, detail="session_not_found")

@@ -1049,6 +1049,12 @@ struct ContentView: View {
         return f
     }()
 
+    private static let relativeDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
     private func relativeTime(_ iso: String) -> String {
         let date = Self.isoFormatter.date(from: iso) ?? Self.isoFormatterNoFraction.date(from: iso)
         guard let date else { return "" }
@@ -1057,9 +1063,7 @@ struct ContentView: View {
         if interval < 3600 { return "\(Int(interval / 60))m ago" }
         if interval < 86400 { return "\(Int(interval / 3600))h ago" }
         if interval < 604800 { return "\(Int(interval / 86400))d ago" }
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        return f.string(from: date)
+        return Self.relativeDateFormatter.string(from: date)
     }
 
     private func agentInputBar(_ agent: PersistentAgent) -> some View {
@@ -1780,10 +1784,15 @@ struct ContentView: View {
     }
 
     private func reconnect() async {
+        let oldDeviceId = deviceId
+        let oldToken = deviceToken
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             let pairing = try await client.startPairing()
             let completed = try await client.completePairing(code: pairing.code, deviceName: deviceName.isEmpty ? UIDevice.current.name : deviceName, platform: "ios")
+            if !oldDeviceId.isEmpty {
+                _ = try? await client.revokeDevice(id: oldDeviceId, deviceToken: oldToken)
+            }
             deviceId = completed.deviceId
             deviceToken = completed.deviceToken
             KeychainHelper.save(completed.deviceId, key: "device_id")

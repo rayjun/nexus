@@ -203,6 +203,15 @@ final class MobileGatewayClient {
         try await sendEmpty(request)
     }
 
+    func revokeDevice(id: String, deviceToken: String) async throws {
+        if deviceToken.isEmpty {
+            throw MobileGatewayError.emptyToken
+        }
+        var request = try request(path: "/mobile/v1/devices/\(id)", method: "DELETE")
+        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
+        try await sendEmpty(request)
+    }
+
     func updateAgent(id: String, name: String, baseURL: String, deviceToken: String) async throws -> AgentInfo {
         if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
         return try await post("/mobile/v1/agents/\(id)", body: AgentBody(name: name, baseUrl: baseURL), token: deviceToken)

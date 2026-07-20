@@ -162,7 +162,10 @@ class StateDbMobileStore:
     def _persist_agents(self) -> None:
         self.agents_path.parent.mkdir(parents=True, exist_ok=True)
         managed = [agent.model_dump(mode="json") for agent in self.agents.values() if agent.id != "agent_vps"]
-        self.agents_path.write_text(json.dumps({"agents": managed}, indent=2, ensure_ascii=False))
+        data = json.dumps({"agents": managed}, indent=2, ensure_ascii=False)
+        tmp_path = self.agents_path.with_suffix(".tmp")
+        tmp_path.write_text(data)
+        tmp_path.replace(self.agents_path)
 
     def _ensure_device_table(self) -> None:
         with self._connect() as con:
@@ -336,6 +339,12 @@ class StateDbMobileStore:
             con.commit()
 
         assistant_content, session_id = self._call_hermes(agent_id, agent_name, agent_desc, content)
+
+        # Don't persist error messages in the conversation history
+        if assistant_content.startswith("[Error:"):
+            user_msg = PersistentAgentMessage(id=user_msg_id, agent_id=agent_id, role="user", content=content, created_at=now)
+            error_msg = PersistentAgentMessage(id=assistant_msg_id, agent_id=agent_id, role="assistant", content=assistant_content, created_at=datetime.now(UTC))
+            return user_msg, error_msg
 
         now2 = datetime.now(UTC)
         with self._connect() as con:
