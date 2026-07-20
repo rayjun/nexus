@@ -55,6 +55,7 @@ struct ContentView: View {
     @State private var isLoadingArtifacts = false
     @State private var toast: ToastMessage?
     @FocusState private var inputFocused: Bool
+    @Environment(\.scenePhase) private var scenePhase
 
     private var isConnected: Bool {
         !deviceId.isEmpty && !deviceToken.isEmpty
@@ -1740,7 +1741,7 @@ struct ContentView: View {
         isLoadingApprovals = true
         isLoadingArtifacts = true
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             async let statusResult = client.status()
             async let agentsResult = client.agents(deviceToken: deviceToken)
             async let sessionsResult = client.sessions(deviceToken: deviceToken)
@@ -1810,7 +1811,7 @@ struct ContentView: View {
         guard !name.isEmpty else { return }
         isLoadingPersistentAgents = true
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             let agent = try await client.createPersistentAgent(name: name, description: newAgentDesc, deviceToken: deviceToken)
             persistentAgents.insert(agent, at: 0)
             newAgentName = ""
@@ -1824,7 +1825,7 @@ struct ContentView: View {
 
     private func deleteAgent(_ agent: PersistentAgent) async {
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             try await client.deletePersistentAgent(id: agent.id, deviceToken: deviceToken)
             persistentAgents.removeAll { $0.id == agent.id }
             toast = ToastMessage(text: "Deleted \(agent.name)", kind: .success)
@@ -1838,7 +1839,7 @@ struct ContentView: View {
         guard !name.isEmpty else { return }
         isLoadingPersistentAgents = true
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             let updated = try await client.updatePersistentAgent(id: editAgentId, name: name, description: editAgentDesc, icon: editAgentIcon, deviceToken: deviceToken)
             if let idx = persistentAgents.firstIndex(where: { $0.id == editAgentId }) {
                 persistentAgents[idx] = updated
@@ -1854,7 +1855,7 @@ struct ContentView: View {
     private func loadAgentMessages(_ agent: PersistentAgent) async {
         isLoadingAgentMessages = true
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             agentMessages = try await client.agentMessages(agentId: agent.id, deviceToken: deviceToken)
         } catch {
             statusMessage = error.localizedDescription
@@ -1879,7 +1880,7 @@ struct ContentView: View {
         agentMessages.append(localUserMsg)
 
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             let response = try await client.sendAgentMessage(agentId: agent.id, content: text, deviceToken: deviceToken)
             if let idx = agentMessages.firstIndex(where: { $0.id == localUserMsg.id }) {
                 agentMessages[idx] = response.userMessage
@@ -1899,7 +1900,7 @@ struct ContentView: View {
         guard !name.isEmpty, !url.isEmpty else { return }
         isAddingAgent = true
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             let agent = try await client.addAgent(name: name, baseURL: url, deviceToken: deviceToken)
             agents.append(agent)
             agentNameDraft = ""
@@ -1918,7 +1919,7 @@ struct ContentView: View {
         guard !name.isEmpty else { return }
         isAddingAgent = true
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             let updated = try await client.updateAgent(id: server.id, name: name, baseURL: url, deviceToken: deviceToken)
             if let idx = agents.firstIndex(where: { $0.id == server.id }) {
                 agents[idx] = updated
@@ -1935,7 +1936,7 @@ struct ContentView: View {
     private func removeAgent(_ agent: AgentInfo) async {
         removingAgentId = agent.id
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             try await client.removeAgent(id: agent.id, deviceToken: deviceToken)
             agents.removeAll { $0.id == agent.id }
             statusMessage = "Removed \(agent.name)"
@@ -1950,7 +1951,7 @@ struct ContentView: View {
         guard !goal.isEmpty else { return }
         isCreatingSession = true
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             let response = try await client.createSession(goal: goal, deviceToken: deviceToken)
             sessions.removeAll { $0.id == response.session.id }
             sessions.insert(response.session, at: 0)
@@ -1968,7 +1969,7 @@ struct ContentView: View {
         isLoadingTimeline = true
         timelineError = ""
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             selectedTimeline = try await client.timeline(sessionId: session.id, deviceToken: deviceToken)
         } catch {
             selectedTimeline = nil
@@ -1983,7 +1984,7 @@ struct ContentView: View {
         isAppendingGoal = true
         timelineError = ""
         do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+            let client = makeClient()
             let response = try await client.appendGoal(sessionId: session.id, text: text, deviceToken: deviceToken)
             selectedTimeline = response.timeline
             sessions.removeAll { $0.id == response.session.id }
@@ -1994,6 +1995,14 @@ struct ContentView: View {
             toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
         isAppendingGoal = false
+    }
+
+    private func makeClient() -> MobileGatewayClient {
+        let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
+        client.onUnauthorized = { [weak self] in
+            await self?.reconnect()
+        }
+        return client
     }
 
     private func normalized(_ value: String) -> String {
