@@ -55,6 +55,8 @@ struct ContentView: View {
     @State private var isLoadingApprovals = false
     @State private var isLoadingArtifacts = false
     @State private var toast: ToastMessage?
+    @State private var searchText = ""
+    @State private var isShowingSettings = false
     @FocusState private var inputFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
@@ -106,6 +108,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isShowingEditAgent) {
             editAgentSheet
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            settingsSheet
         }
         .fullScreenCover(item: $selectedPersistentAgent) { agent in
             NavigationStack {
@@ -182,6 +187,11 @@ struct ContentView: View {
                 .sheet(isPresented: $isShowingEditServer) {
                     editServerSheet
                 }
+        } else if agents.count == 1 {
+            serverDashboard(agents[0])
+                .sheet(isPresented: $isShowingEditServer) {
+                    editServerSheet
+                }
         } else {
             agentServerList
         }
@@ -231,6 +241,14 @@ struct ContentView: View {
                         Task { await loadHome() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(NexusStyle.muted)
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        isShowingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(NexusStyle.muted)
                     }
@@ -436,12 +454,22 @@ struct ContentView: View {
         case "Sessions":
             VStack(alignment: .leading, spacing: 12) {
                 sectionHeader("SESSIONS", count: sessions.count)
+                if sessions.count > 5 {
+                    TextField("Search sessions…", text: $searchText)
+                        .font(.system(size: 14))
+                        .foregroundStyle(NexusStyle.text)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+                }
                 if isLoadingSessions {
                     loadingRows
                 } else if sessions.isEmpty {
                     emptyState(title: "No recent sessions", subtitle: "Start from Desktop or Gateway and they will appear here.")
                 } else {
-                    ForEach(sessions.prefix(8)) { session in
+                    let filtered = searchText.isEmpty ? sessions : sessions.filter { $0.title.localizedCaseInsensitiveContains(searchText) || $0.id.localizedCaseInsensitiveContains(searchText) }
+                    ForEach(filtered) { session in
                         Button {
                             selectedTimeline = nil
                             timelineError = ""
@@ -823,6 +851,99 @@ struct ContentView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         isShowingEditAgent = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(NexusStyle.muted)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var settingsSheet: some View {
+        NavigationStack {
+            ZStack {
+                NexusStyle.background.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "iphone")
+                                .font(.system(size: 20))
+                                .foregroundStyle(NexusStyle.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Device")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(NexusStyle.text)
+                                Text(deviceName.isEmpty ? UIDevice.current.name : deviceName)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(NexusStyle.muted)
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "server.rack")
+                                .font(.system(size: 20))
+                                .foregroundStyle(NexusStyle.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Gateway")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(NexusStyle.text)
+                                Text(gatewayBaseUrl)
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundStyle(NexusStyle.muted)
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+                    }
+
+                    Spacer()
+
+                    Button {
+                        clearPairing()
+                        isShowingSettings = false
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("Disconnect")
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(Color.red.opacity(0.8), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    VStack(spacing: 4) {
+                        Text("Nexus v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0")")
+                            .font(.system(size: 12))
+                            .foregroundStyle(NexusStyle.subtleText)
+                        Text("Build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(NexusStyle.subtleText)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(18)
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isShowingSettings = false
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
@@ -1617,26 +1738,74 @@ struct ContentView: View {
     }
 
     private func approvalRow(_ approval: ApprovalInfo) -> some View {
-        HStack(spacing: 11) {
-            Image(systemName: "terminal")
-                .foregroundStyle(NexusStyle.blue)
-                .frame(width: 26, height: 26)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(approval.title)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(NexusStyle.text)
-                Text(approval.summary)
-                    .font(.system(size: 12))
-                    .foregroundStyle(NexusStyle.muted)
-                    .lineLimit(2)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 11) {
+                Image(systemName: "terminal")
+                    .foregroundStyle(NexusStyle.blue)
+                    .frame(width: 26, height: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(approval.title)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(NexusStyle.text)
+                    Text(approval.summary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(NexusStyle.muted)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Text(approval.status)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(approval.status == "pending" ? NexusStyle.blue : NexusStyle.subtleText)
             }
-            Spacer()
-            Text(approval.status)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(approval.status == "pending" ? NexusStyle.blue : NexusStyle.subtleText)
+            if approval.status == "pending" {
+                HStack(spacing: 10) {
+                    Button {
+                        Task { await resolveApproval(id: approval.id, approve: true) }
+                    } label: {
+                        Text("Approve")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(NexusStyle.blue, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        Task { await resolveApproval(id: approval.id, approve: false) }
+                    } label: {
+                        Text("Deny")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(NexusStyle.text)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(NexusStyle.line.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(12)
         .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    @State private var resolvingApprovalId: String?
+
+    private func resolveApproval(id: String, approve: Bool) async {
+        resolvingApprovalId = id
+        do {
+            let client = makeClient()
+            if approve {
+                try await client.approveApproval(id: id, deviceToken: deviceToken)
+            } else {
+                try await client.denyApproval(id: id, deviceToken: deviceToken)
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            approvalList.removeAll { $0.id == id }
+            toast = ToastMessage(text: approve ? "Approved" : "Denied", kind: .success)
+        } catch {
+            toast = ToastMessage(text: error.localizedDescription, kind: .error)
+        }
+        resolvingApprovalId = nil
     }
 
     private func activeSessionRow(_ session: SessionSummary) -> some View {
@@ -1893,6 +2062,8 @@ struct ContentView: View {
             }
             agentMessages.append(response.assistantMessage)
         } catch {
+            agentInputDraft = text
+            agentMessages.removeAll { $0.id == localUserMsg.id }
             toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
         isSendingAgentMessage = false
@@ -2210,6 +2381,31 @@ private struct MarkdownText: View {
                     result.append(codeAttr)
                 } else {
                     result.append(AttributedString(before + "`" + remaining))
+                    remaining = ""
+                }
+            } else if let range = remaining.range(of: "[") {
+                let before = String(remaining[..<range.lowerBound])
+                remaining = String(remaining[range.upperBound...])
+                if let closeBracket = remaining.range(of: "](") {
+                    let linkText = String(remaining[..<closeBracket.lowerBound])
+                    remaining = String(remaining[closeBracket.upperBound...])
+                    if let closeParen = remaining.range(of: ")") {
+                        let linkUrl = String(remaining[..<closeParen.lowerBound])
+                        remaining = String(remaining[closeParen.upperBound...])
+                        if !before.isEmpty {
+                            result.append(AttributedString(before))
+                        }
+                        var linkAttr = AttributedString(linkText)
+                        linkAttr.foregroundColor = NexusStyle.blue
+                        linkAttr.font = .system(size: 14)
+                        linkAttr.link = URL(string: linkUrl)
+                        result.append(linkAttr)
+                    } else {
+                        result.append(AttributedString(before + "[" + remaining))
+                        remaining = ""
+                    }
+                } else {
+                    result.append(AttributedString(before + "[" + remaining))
                     remaining = ""
                 }
             } else if let range = remaining.range(of: "**") {

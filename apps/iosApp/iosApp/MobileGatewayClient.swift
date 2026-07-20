@@ -221,7 +221,7 @@ final class MobileGatewayClient {
         if deviceToken.isEmpty {
             throw MobileGatewayError.emptyToken
         }
-        return try await post("/mobile/v1/sessions", body: GoalBody(goal: goal), token: deviceToken)
+        return try await post("/mobile/v1/sessions", body: GoalBody(goal: goal), token: deviceToken, timeout: 180)
     }
 
     func timeline(sessionId: String, deviceToken: String) async throws -> SessionTimeline {
@@ -235,7 +235,7 @@ final class MobileGatewayClient {
         if deviceToken.isEmpty {
             throw MobileGatewayError.emptyToken
         }
-        return try await post("/mobile/v1/sessions/\(sessionId)/goals", body: GoalBody(goal: text), token: deviceToken)
+        return try await post("/mobile/v1/sessions/\(sessionId)/goals", body: GoalBody(goal: text), token: deviceToken, timeout: 180)
     }
 
     func persistentAgents(deviceToken: String) async throws -> [PersistentAgent] {
@@ -282,6 +282,20 @@ final class MobileGatewayClient {
         if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
         let response: ApprovalsResponse = try await get("/mobile/v1/approvals", token: deviceToken)
         return response.approvals
+    }
+
+    func approveApproval(id: String, deviceToken: String) async throws {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        var request = try request(path: "/mobile/v1/approvals/\(id)/approve", method: "POST", timeout: 30)
+        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
+        try await sendEmpty(request)
+    }
+
+    func denyApproval(id: String, deviceToken: String) async throws {
+        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
+        var request = try request(path: "/mobile/v1/approvals/\(id)/deny", method: "POST", timeout: 30)
+        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
+        try await sendEmpty(request)
     }
 
     func artifacts(deviceToken: String) async throws -> [ArtifactInfo] {
