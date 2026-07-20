@@ -160,10 +160,11 @@ def test_sessions_endpoint_can_use_real_state_store(tmp_path: Path):
     assert body["sessions"][0]["status"] == "running"
 
 
-def test_state_db_store_appends_goal_to_existing_session(tmp_path: Path):
+def test_state_db_store_appends_goal_to_existing_session(tmp_path: Path, monkeypatch):
     db_path = tmp_path / "state.db"
     create_state_db(db_path)
     store = StateDbMobileStore(db_path)
+    monkeypatch.setattr(store, "_read_api_key", lambda: "")
 
     session, timeline = store.append_goal("sess_real", "Continue from mobile")
 
@@ -183,10 +184,11 @@ def test_state_db_store_appends_goal_to_existing_session(tmp_path: Path):
     assert count == 4
 
 
-def test_append_goal_endpoint_returns_updated_timeline(tmp_path: Path):
+def test_append_goal_endpoint_returns_updated_timeline(tmp_path: Path, monkeypatch):
     db_path = tmp_path / "state.db"
     create_state_db(db_path)
     store = StateDbMobileStore(db_path)
+    monkeypatch.setattr(store, "_read_api_key", lambda: "")
     client = TestClient(create_app(store=store))
 
     response = client.post(
