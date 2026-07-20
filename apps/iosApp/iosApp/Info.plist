@@ -26,19 +26,18 @@
     <true/>
     <key>NSAppTransportSecurity</key>
     <dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <true/>
-        <key>NSAllowsArbitraryLoadsInWebContent</key>
-        <true/>
-        <key>NSAllowsArbitraryLoadsForMedia</key>
-        <true/>
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Nexus connects to your local or Tailscale Hermes Gateway.</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>UILaunchScreen</key>
-    <dict/>
+    <dict>
+        <key>UIColorName</key>
+        <string>LaunchBackground</string>
+    </dict>
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>

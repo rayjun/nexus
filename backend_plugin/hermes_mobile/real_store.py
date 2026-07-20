@@ -362,6 +362,16 @@ class StateDbMobileStore:
         assistant_msg = PersistentAgentMessage(id=assistant_msg_id, agent_id=agent_id, role="assistant", content=assistant_content, created_at=now2)
         return user_msg, assistant_msg
 
+    def _read_api_key(self) -> str:
+        api_key = ""
+        env_path = Path.home() / ".hermes" / ".env"
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                if line.startswith("API_SERVER_KEY=") and not line.startswith("#"):
+                    api_key = line.split("=", 1)[1].strip()
+                    break
+        return api_key
+
     def _call_hermes(self, agent_id: str, agent_name: str, agent_desc: str, content: str) -> tuple[str, str | None]:
         import httpx
 
@@ -371,13 +381,7 @@ class StateDbMobileStore:
 
         hermes_session_id = session_ids[-1] if session_ids else f"mobile-agent-{agent_id}"
 
-        api_key = ""
-        env_path = Path.home() / ".hermes" / ".env"
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                if line.startswith("API_SERVER_KEY=") and not line.startswith("#"):
-                    api_key = line.split("=", 1)[1].strip()
-                    break
+        api_key = self._read_api_key()
 
         if not api_key:
             return "[Error: API_SERVER_KEY not set in ~/.hermes/.env]", None
@@ -614,7 +618,64 @@ class StateDbMobileStore:
         return None
 
     def create_session_from_goal(self, goal: str) -> tuple[SessionSummary, SessionTimeline]:
-        raise NotImplementedError("Starting real Hermes sessions is not wired yet")
+        import os
+        api_key = self._read_api_key()
+        if not api_key:
+            raise RuntimeError("API_SERVER_KEY not set in ~/.hermes/.env")
+        api_url = os.environ.get("HERMES_API_URL", "http://127.0.0.1:8642")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+        try:
+            import httpx
+            resp = httpx.post(f"{api_url}/api/sessions", headers=headers, json={"source": "mobile"}, timeout=15)
+            resp.raise_for_status()
+            session_data = resp.json().get("session", {})
+            session_id = session_data.get("id", "")
+            if not session_id:
+                raise RuntimeError("Failed to create session")
+            headers["X-Hermes-Session-Id"] = session_id
+            body = {
+                "model": "hermes-agent",
+                "messages": [{"role": "user", "content": goal}],
+                "max_tokens": 2000,
+                "stream": False,
+            }
+            chat_resp = httpx.post(f"{api_url}/v1/chat/completions", headers=headers, json=body, timeout=120)
+            chat_resp.raise_for_status()
+            now = datetime.now(UTC).timestamp()
+            with self._connect() as con:
+                con.execute(
+                    "INSERT OR IGNORE INTO sessions(id, title, started_at, message_count, archived) VALUES(?, ?, ?, 1, 0)",
+                    (session_id, goal[:80], now),
+                )
+                con.execute(
+                    "INSERT INTO messages(session_id, role, content, timestamp, active, compacted) VALUES(?, 'user', ?, ?, 1, 0)",
+                    (session_id, goal, now),
+                )
+                assistant_content = chat_resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                if assistant_content:
+                    con.execute(
+                        "INSERT INTO messages(session_id, role, content, timestamp, active, compacted) VALUES(?, 'assistant', ?, ?, 1, 0)",
+                        (session_id, assistant_content, now + 0.1),
+                    )
+                    con.execute("UPDATE sessions SET message_count = 2 WHERE id = ?", (session_id,))
+                else:
+                    con.execute("UPDATE sessions SET message_count = 1 WHERE id = ?", (session_id,))
+                con.commit()
+            timeline = self.get_timeline(session_id)
+            with self._connect() as con:
+                row = con.execute("SELECT id, title, started_at, ended_at FROM sessions WHERE id = ? AND archived = 0", (session_id,)).fetchone()
+            if not row:
+                raise RuntimeError("Session was not persisted")
+            return self._session_summary(row), timeline or SessionTimeline(session_id=session_id, title=goal[:80], items=[])
+        except httpx.ConnectError:
+            raise RuntimeError("Hermes API server is not running")
+        except httpx.TimeoutException:
+            raise RuntimeError("Hermes API server timed out")
+        except Exception as e:
+            raise RuntimeError(f"Unable to call Hermes: {e}")
 
     def append_goal(self, session_id: str, goal: str) -> tuple[SessionSummary, SessionTimeline] | None:
         now = datetime.now(UTC).timestamp()
@@ -643,6 +704,38 @@ class StateDbMobileStore:
                 (session_id,),
             )
             con.commit()
+
+        # Call Hermes API to get assistant response
+        api_key = self._read_api_key()
+        if api_key:
+            import os, httpx
+            api_url = os.environ.get("HERMES_API_URL", "http://127.0.0.1:8642")
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "X-Hermes-Session-Id": session_id,
+            }
+            body = {
+                "model": "hermes-agent",
+                "messages": [{"role": "user", "content": goal}],
+                "max_tokens": 2000,
+                "stream": False,
+            }
+            try:
+                resp = httpx.post(f"{api_url}/v1/chat/completions", headers=headers, json=body, timeout=120)
+                resp.raise_for_status()
+                assistant_content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                if assistant_content:
+                    with self._connect() as con:
+                        con.execute(
+                            "INSERT INTO messages(session_id, role, content, timestamp, active, compacted) VALUES(?, 'assistant', ?, ?, 1, 0)",
+                            (session_id, assistant_content, now + 0.1),
+                        )
+                        con.execute("UPDATE sessions SET message_count = COALESCE(message_count, 0) + 1 WHERE id = ?", (session_id,))
+                        con.commit()
+            except Exception:
+                pass
+
         timeline = self.get_timeline(session_id)
         if not timeline:
             return None
@@ -654,8 +747,10 @@ class StateDbMobileStore:
         return self._session_summary(row), timeline
 
     def _connect(self) -> sqlite3.Connection:
-        con = sqlite3.connect(self.db_path)
+        con = sqlite3.connect(self.db_path, timeout=10)
         con.row_factory = sqlite3.Row
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA busy_timeout=10000")
         return con
 
     def _session_summary(self, row: sqlite3.Row) -> SessionSummary:

@@ -305,6 +305,10 @@ cd /path/to/hermes-mobile
 python -m pytest tests/ -q
 ```
 
+## Privacy Policy
+
+Nexus does not collect, transmit, or store any personal data. All communication occurs directly between the app and your self-hosted Hermes Gateway on your local network or Tailscale VPN. No analytics, no telemetry, no third-party SDKs. Device pairing tokens are stored locally in iOS Keychain and never leave the device.
+
 ## Tech Stack
 
 - **iOS**: SwiftUI, URLSession, Keychain (Security framework)
