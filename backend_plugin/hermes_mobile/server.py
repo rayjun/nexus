@@ -7,6 +7,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Optional, Protocol
+import time
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket
 
@@ -68,6 +69,7 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
     app = FastAPI(title="Nexus Mobile Gateway", version="0.1.0")
     store = store or create_default_store()
     used_signed_nonces: set[tuple[str, str]] = set()
+    pair_attempts: dict[str, list[float]] = {}
 
     @app.get("/mobile/v1/status", response_model=StatusResponse)
     def status() -> StatusResponse:
@@ -104,7 +106,14 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
         return store.start_pairing()
 
     @app.post("/mobile/v1/pair/complete", response_model=PairingCompleteResponse)
-    def pair_complete(request: PairingCompleteRequest) -> PairingCompleteResponse:
+    def pair_complete(request: PairingCompleteRequest, raw_request: Request) -> PairingCompleteResponse:
+        client_ip = raw_request.client.host if raw_request.client else "unknown"
+        now = time.time()
+        attempts = [t for t in pair_attempts.get(client_ip, []) if now - t < 600]
+        if len(attempts) >= 10:
+            raise HTTPException(status_code=429, detail="too_many_pairing_attempts")
+        attempts.append(now)
+        pair_attempts[client_ip] = attempts
         try:
             paired = store.complete_pairing(request)
         except PairingCodeExpired:

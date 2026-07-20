@@ -123,11 +123,18 @@ enum MobileGatewayError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Invalid gateway URL"
+            return "Gateway address is invalid. Please check the URL in Settings."
         case .badStatus(let code):
-            return "Gateway returned HTTP \(code)"
+            switch code {
+            case 401: return "Session expired. Reconnecting…"
+            case 403: return "Access denied. Your device may not be authorized."
+            case 404: return "The requested resource was not found."
+            case 429: return "Too many attempts. Please wait a moment and try again."
+            case 500...599: return "Gateway is temporarily unavailable. Please try again."
+            default: return "Gateway returned an error (HTTP \(code)). Please try again."
+            }
         case .emptyToken:
-            return "Missing device token"
+            return "Not connected to a gateway. Please reconnect."
         }
     }
 }
