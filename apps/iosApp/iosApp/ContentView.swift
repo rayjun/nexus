@@ -187,11 +187,12 @@ struct ContentView: View {
                 .sheet(isPresented: $isShowingEditServer) {
                     editServerSheet
                 }
-        } else if agents.count == 1 {
+        } else if agents.count == 1, !isLoadingAgents {
             serverDashboard(agents[0])
                 .sheet(isPresented: $isShowingEditServer) {
                     editServerSheet
                 }
+                .onAppear { selectedAgentServer = agents[0] }
         } else {
             agentServerList
         }
