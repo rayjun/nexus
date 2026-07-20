@@ -91,6 +91,11 @@ struct ContentView: View {
                 Task { await connect() }
             }
         }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active && isConnected && agents.isEmpty {
+                Task { await loadHome() }
+            }
+        }
         .sheet(isPresented: $isShowingComposer) {
             goalComposer
         }
@@ -1840,19 +1845,6 @@ struct ContentView: View {
             }
             isShowingEditAgent = false
             toast = ToastMessage(text: "Updated \(updated.name)", kind: .success)
-        } catch MobileGatewayError.badStatus(401) {
-            await reconnect()
-            do {
-                let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
-                let updated = try await client.updatePersistentAgent(id: editAgentId, name: name, description: editAgentDesc, icon: editAgentIcon, deviceToken: deviceToken)
-                if let idx = persistentAgents.firstIndex(where: { $0.id == editAgentId }) {
-                    persistentAgents[idx] = updated
-                }
-                isShowingEditAgent = false
-                toast = ToastMessage(text: "Updated \(updated.name)", kind: .success)
-            } catch {
-                toast = ToastMessage(text: error.localizedDescription, kind: .error)
-            }
         } catch {
             toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
@@ -1864,14 +1856,6 @@ struct ContentView: View {
         do {
             let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
             agentMessages = try await client.agentMessages(agentId: agent.id, deviceToken: deviceToken)
-        } catch MobileGatewayError.badStatus(401) {
-            await reconnect()
-            do {
-                let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
-                agentMessages = try await client.agentMessages(agentId: agent.id, deviceToken: deviceToken)
-            } catch {
-                statusMessage = error.localizedDescription
-            }
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -1903,20 +1887,6 @@ struct ContentView: View {
                 agentMessages.append(response.userMessage)
             }
             agentMessages.append(response.assistantMessage)
-        } catch MobileGatewayError.badStatus(401) {
-            await reconnect()
-            do {
-                let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
-                let response = try await client.sendAgentMessage(agentId: agent.id, content: text, deviceToken: deviceToken)
-                if let idx = agentMessages.firstIndex(where: { $0.id == localUserMsg.id }) {
-                    agentMessages[idx] = response.userMessage
-                } else {
-                    agentMessages.append(response.userMessage)
-                }
-                agentMessages.append(response.assistantMessage)
-            } catch {
-                toast = ToastMessage(text: error.localizedDescription, kind: .error)
-            }
         } catch {
             toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }

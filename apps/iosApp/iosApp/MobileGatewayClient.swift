@@ -137,6 +137,7 @@ final class MobileGatewayClient {
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    var onUnauthorized: (() async -> Void)?
 
     init(baseURL: String, session: URLSession = .shared) {
         var normalized = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -278,7 +279,13 @@ final class MobileGatewayClient {
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        return try await send(request)
+        do {
+            return try await send(request)
+        } catch MobileGatewayError.badStatus(401) {
+            guard let onUnauthorized else { throw MobileGatewayError.badStatus(401) }
+            await onUnauthorized()
+            throw MobileGatewayError.badStatus(401)
+        }
     }
 
     private func post<T: Decodable, Body: Encodable>(_ path: String, body: Body, token: String? = nil, timeout: TimeInterval = 10) async throws -> T {
@@ -288,7 +295,13 @@ final class MobileGatewayClient {
         }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
-        return try await send(request)
+        do {
+            return try await send(request)
+        } catch MobileGatewayError.badStatus(401) {
+            guard let onUnauthorized else { throw MobileGatewayError.badStatus(401) }
+            await onUnauthorized()
+            throw MobileGatewayError.badStatus(401)
+        }
     }
 
     private func put<T: Decodable, Body: Encodable>(_ path: String, body: Body, token: String? = nil, timeout: TimeInterval = 10) async throws -> T {
