@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @AppStorage("gateway_base_url") private var gatewayBaseUrl = "http://127.0.0.1:8765"
@@ -1747,21 +1748,7 @@ struct ContentView: View {
         isLoadingApprovals = true
         isLoadingArtifacts = true
         do {
-            let client = makeClient()
-            async let statusResult = client.status()
-            async let agentsResult = client.agents(deviceToken: deviceToken)
-            async let sessionsResult = client.sessions(deviceToken: deviceToken)
-            async let persistentResult = client.persistentAgents(deviceToken: deviceToken)
-            async let cronResult = client.cronJobs(deviceToken: deviceToken)
-            async let approvalsResult = client.approvals(deviceToken: deviceToken)
-            async let artifactsResult = client.artifacts(deviceToken: deviceToken)
-            nodeName = try await statusResult.nodeName
-            agents = try await agentsResult
-            sessions = try await sessionsResult
-            persistentAgents = try await persistentResult
-            cronJobs = try await cronResult
-            approvalList = try await approvalsResult
-            artifactList = try await artifactsResult
+            try await fetchAllData()
         } catch MobileGatewayError.badStatus(401) {
             statusMessage = "Reconnecting..."
             await reconnect()
@@ -1783,6 +1770,24 @@ struct ContentView: View {
         isLoadingArtifacts = false
     }
 
+    private func fetchAllData() async throws {
+        let client = makeClient()
+        async let statusResult = client.status()
+        async let agentsResult = client.agents(deviceToken: deviceToken)
+        async let sessionsResult = client.sessions(deviceToken: deviceToken)
+        async let persistentResult = client.persistentAgents(deviceToken: deviceToken)
+        async let cronResult = client.cronJobs(deviceToken: deviceToken)
+        async let approvalsResult = client.approvals(deviceToken: deviceToken)
+        async let artifactsResult = client.artifacts(deviceToken: deviceToken)
+        nodeName = try await statusResult.nodeName
+        agents = try await agentsResult
+        sessions = try await sessionsResult
+        persistentAgents = try await persistentResult
+        cronJobs = try await cronResult
+        approvalList = try await approvalsResult
+        artifactList = try await artifactsResult
+    }
+
     private func reconnect() async {
         let oldDeviceId = deviceId
         let oldToken = deviceToken
@@ -1797,20 +1802,7 @@ struct ContentView: View {
             deviceToken = completed.deviceToken
             KeychainHelper.save(completed.deviceId, key: "device_id")
             KeychainHelper.save(completed.deviceToken, key: "device_token")
-            async let statusResult = client.status()
-            async let agentsResult = client.agents(deviceToken: deviceToken)
-            async let sessionsResult = client.sessions(deviceToken: deviceToken)
-            async let persistentResult = client.persistentAgents(deviceToken: deviceToken)
-            async let cronResult = client.cronJobs(deviceToken: deviceToken)
-            async let approvalsResult = client.approvals(deviceToken: deviceToken)
-            async let artifactsResult = client.artifacts(deviceToken: deviceToken)
-            nodeName = try await statusResult.nodeName
-            agents = try await agentsResult
-            sessions = try await sessionsResult
-            persistentAgents = try await persistentResult
-            cronJobs = try await cronResult
-            approvalList = try await approvalsResult
-            artifactList = try await artifactsResult
+            try await fetchAllData()
             statusMessage = "Reconnected to \(nodeName)"
         } catch {
             statusMessage = error.localizedDescription
@@ -1878,6 +1870,7 @@ struct ContentView: View {
         let text = agentInputDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         isSendingAgentMessage = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         agentInputDraft = ""
 
         let now = ISO8601DateFormatter().string(from: Date())

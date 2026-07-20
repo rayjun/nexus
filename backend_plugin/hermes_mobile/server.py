@@ -68,7 +68,7 @@ def create_default_store() -> MobileStore:
 def create_app(store: MobileStore | None = None) -> FastAPI:
     app = FastAPI(title="Nexus Mobile Gateway", version="0.1.0")
     store = store or create_default_store()
-    used_signed_nonces: set[tuple[str, str]] = set()
+    used_signed_nonces: dict[tuple[str, str], float] = {}
     pair_attempts: dict[str, list[float]] = {}
     import logging
     logger = logging.getLogger("nexus_gateway")
@@ -159,6 +159,11 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
             nonce_key = (device_id, nonce)
             if nonce_key in used_signed_nonces:
                 raise HTTPException(status_code=401, detail="mobile_auth_required")
+            # TTL cleanup: remove nonces older than 5 minutes
+            now_ts = time.time()
+            expired = [k for k, t in used_signed_nonces.items() if now_ts - t > 300]
+            for k in expired:
+                del used_signed_nonces[k]
             target = request.url.path
             if request.url.query:
                 target = f"{target}?{request.url.query}"
@@ -166,7 +171,7 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
             expected = hmac.new(device_token.encode(), message.encode(), hashlib.sha256).hexdigest()
             if not hmac.compare_digest(expected, signature):
                 raise HTTPException(status_code=401, detail="mobile_auth_required")
-            used_signed_nonces.add(nonce_key)
+            used_signed_nonces[nonce_key] = now_ts
             return device_id
         raise HTTPException(status_code=401, detail="mobile_auth_required")
 
