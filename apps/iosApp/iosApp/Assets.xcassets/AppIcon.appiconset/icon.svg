@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A8BFF"/>
+      <stop offset="100%" stop-color="#0058CC"/>
+    </linearGradient>
+    <linearGradient id="node" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#D0E8FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <g transform="translate(512 512)">
+    <!-- Three connected nodes forming N shape -->
+    <line x1="-180" y1="-160" x2="-180" y2="160" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.9"/>
+    <line x1="180" y1="-160" x2="180" y2="160" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.9"/>
+    <line x1="-180" y1="-160" x2="180" y2="160" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.7"/>
+    <!-- Nodes -->
+    <circle cx="-180" cy="-160" r="44" fill="url(#node)"/>
+    <circle cx="-180" cy="160" r="44" fill="url(#node)"/>
+    <circle cx="180" cy="-160" r="44" fill="url(#node)"/>
+    <circle cx="180" cy="160" r="44" fill="url(#node)"/>
+    <!-- Center accent -->
+    <circle cx="0" cy="0" r="28" fill="#FFFFFF" opacity="0.3"/>
+    <circle cx="0" cy="0" r="14" fill="#FFFFFF" opacity="0.8"/>
+  </g>
+</svg>
