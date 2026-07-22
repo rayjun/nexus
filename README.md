@@ -90,84 +90,52 @@ curl http://127.0.0.1:8642/v1/models \
 
 ### 3. Set Up the Mobile Gateway
 
-The Mobile Gateway is a standalone FastAPI server included in this repo. It handles device pairing, agent CRUD, and proxies chat messages to the Hermes API server.
+The Mobile Gateway is a standalone FastAPI server included in this repo. It handles device pairing, agent CRUD, session management, and proxies chat messages to the Hermes API server.
 
-#### 3a. Create a Python Virtual Environment
+#### 3a. Install Dependencies
 
 ```bash
 cd /path/to/hermes-mobile
 
-# Create venv (Python 3.11+)
-python3.11 -m venv /tmp/hermes-mobile-venv311
-
-# Activate and install dependencies
-source /tmp/hermes-mobile-venv311/bin/activate
-pip install fastapi uvicorn httpx pydantic pyyaml
+# Install dependencies (Python 3.11+ required)
+pip3.11 install fastapi uvicorn httpx pydantic pyyaml
 ```
 
 Dependencies:
+
 | Package | Purpose |
 |---------|---------|
 | `fastapi` | Web framework for the gateway API |
 | `uvicorn` | ASGI server |
 | `httpx` | HTTP client to call Hermes API server |
 | `pydantic` | Data validation / models |
-| `pyyaml` | Config parsing (optional, for future use) |
+| `pyyaml` | Config parsing (`~/.hermes/config.yaml`) |
 
 #### 3b. Start the Mobile Gateway
+
+**Option A: Direct run (foreground)**
 
 ```bash
 cd /path/to/hermes-mobile
 
 HERMES_MOBILE_USE_STATE_DB=1 \
-  /tmp/hermes-mobile-venv311/bin/python -m uvicorn \
+  python3.11 -m uvicorn \
   backend_plugin.hermes_mobile.server:app \
   --host 0.0.0.0 \
   --port 8765
 ```
 
-Environment variables:
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `HERMES_MOBILE_USE_STATE_DB` | **Yes** | — | Set to `1` to use Hermes `state.db` (real data). Without this, the gateway falls back to a mock store with no persistence |
-| `HERMES_MOBILE_STATE_DB` | No | `~/.hermes/state.db` | Override path to the Hermes state database |
-| `HERMES_MOBILE_USE_LIVE_APPROVALS` | No | — | Set to `1` to enable live approval forwarding |
-
-Verify the gateway is running:
-
-```bash
-curl http://127.0.0.1:8765/mobile/v1/status | python3 -m json.tool
-```
-
-Expected output:
-
-```json
-{
-  "node_id": "your-machine",
-  "node_name": "your-machine",
-  "status": "online",
-  "gateway_ready": true,
-  "hermes_version": "0.x.x",
-  "api_version": "1.0",
-  ...
-}
-```
-
-### 4. Run as a Background Service (Optional)
-
-To keep the gateway running after terminal close, use a process manager or launchd:
-
-#### Using nohup (quick):
+**Option B: Background with nohup**
 
 ```bash
 HERMES_MOBILE_USE_STATE_DB=1 \
-  nohup /tmp/hermes-mobile-venv311/bin/python -m uvicorn \
+  nohup python3.11 -m uvicorn \
   backend_plugin.hermes_mobile.server:app \
   --host 0.0.0.0 --port 8765 \
   > /tmp/mobile-gateway.log 2>&1 &
 ```
 
-#### Using launchd (persistent, auto-restart):
+**Option C: launchd persistent service**
 
 Create `~/Library/LaunchAgents/com.rayjun.nexus.plist`:
 
@@ -181,7 +149,7 @@ Create `~/Library/LaunchAgents/com.rayjun.nexus.plist`:
   <string>com.rayjun.nexus</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/tmp/hermes-mobile-venv311/bin/python</string>
+    <string>/usr/local/bin/python3.11</string>
     <string>-m</string>
     <string>uvicorn</string>
     <string>backend_plugin.hermes_mobile.server:app</string>
@@ -213,17 +181,64 @@ Create `~/Library/LaunchAgents/com.rayjun.nexus.plist`:
 launchctl load ~/Library/LaunchAgents/com.rayjun.nexus.plist
 ```
 
-### 5. Network Access
+#### 3c. Environment Variables
 
-The iOS app connects to the gateway over HTTP. Choose your setup:
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `HERMES_MOBILE_USE_STATE_DB` | **Yes** | — | Set to `1` to use Hermes `state.db` (real data). Without this, the gateway uses a mock store with no persistence |
+| `HERMES_MOBILE_STATE_DB` | No | `~/.hermes/state.db` | Override path to the Hermes state database |
+| `HERMES_MOBILE_BASE_URL` | No | `http://127.0.0.1:8765` | The gateway URL shown in pairing QR code and agent server list |
+| `HERMES_MOBILE_AGENT_NAME` | No | System hostname | Display name for the default agent server |
+| `HERMES_API_URL` | No | `http://127.0.0.1:8642` | Hermes API server URL (for LLM calls) |
 
-| Setup | Gateway URL | Use case |
-|-------|-------------|----------|
-| Simulator (local) | `http://127.0.0.1:8765` | Development on same Mac |
-| Tailscale | `http://100.x.x.x:8765` | Remote access, no port forwarding needed |
-| LAN IP | `http://192.168.x.x:8765` | Same Wi-Fi network |
+Note: Live approval forwarding is enabled by default — no environment variable needed.
 
-> **Tip**: Tailscale is the simplest remote option — it provides authentication through network access alone, no extra password or VPN needed.
+#### 3d. Verify the Gateway
+
+```bash
+curl http://127.0.0.1:8765/mobile/v1/status | python3 -m json.tool
+```
+
+Expected output:
+
+```json
+{
+  "node_id": "your-machine",
+  "node_name": "your-machine",
+  "status": "online",
+  "gateway_ready": true,
+  "model": {
+    "provider": "ollama-cloud",
+    "model": "glm-5.2"
+  },
+  ...
+}
+```
+
+```bash
+# Health check
+curl http://127.0.0.1:8765/health
+# {"status":"ok","service":"nexus-gateway","version":"0.1.0"}
+```
+
+### 5. Connect from iPhone
+
+The gateway must be reachable from your iPhone. Two options:
+
+- **Same Wi-Fi network**: Use your Mac's local IP (e.g., `http://192.168.1.100:8765`)
+- **Tailscale VPN**: Use your Tailscale IP (e.g., `http://100.x.y.z:8765`) — works from anywhere
+
+Find your IP:
+
+```bash
+# Local network IP
+ipconfig getifaddr en0
+
+# Tailscale IP
+tailscale ip -4 2>/dev/null
+```
+
+In the Nexus app, enter this URL when connecting. The app auto-pairs with the gateway — no pairing code needed on the same network.
 
 ## iOS App Installation
 
