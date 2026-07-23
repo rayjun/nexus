@@ -223,22 +223,59 @@ curl http://127.0.0.1:8765/health
 
 ### 5. Connect from iPhone
 
-The gateway must be reachable from your iPhone. Two options:
+The gateway must be reachable from your iPhone via **HTTPS** (iOS 26+ requires TLS).
 
-- **Same Wi-Fi network**: Use your Mac's local IP (e.g., `http://192.168.1.100:8765`)
-- **Tailscale VPN**: Use your Tailscale IP (e.g., `http://100.x.y.z:8765`) — works from anywhere
+#### Set up Caddy reverse proxy (recommended)
 
-Find your IP:
+Caddy automatically generates self-signed certificates. Install and configure:
 
 ```bash
-# Local network IP
-ipconfig getifaddr en0
+# Install Caddy (Ubuntu/Debian)
+sudo apt install caddy
 
-# Tailscale IP
-tailscale ip -4 2>/dev/null
+# Edit Caddyfile
+sudo nano /etc/caddy/Caddyfile
 ```
 
-In the Nexus app, enter this URL when connecting. The app auto-pairs with the gateway — no pairing code needed on the same network.
+Add this configuration (replace `100.91.132.51` with your Tailscale IP):
+
+```
+https://100.91.132.51:8443 {
+    reverse_proxy 127.0.0.1:8642
+    tls internal
+}
+```
+
+```bash
+sudo systemctl restart caddy
+```
+
+This proxies HTTPS :8443 → HTTP :8642 (Hermes API server) with a self-signed cert.
+
+#### Set up Hermes Dashboard with WebSocket
+
+The iOS app connects via WebSocket (`/api/ws`). Start the dashboard server:
+
+```bash
+hermes dashboard --port 8080 --host 0.0.0.0 --insecure
+```
+
+Add a second Caddy route for WebSocket:
+
+```
+https://100.91.132.51:8444 {
+    reverse_proxy 127.0.0.1:8080
+    tls internal
+}
+```
+
+#### In the Nexus app
+
+Enter:
+- **Gateway URL**: `https://100.91.132.51:8444` (dashboard with `/api/ws`)
+- **API Key**: Your `API_SERVER_KEY` from `~/.hermes/.env`
+
+The app auto-converts `https://` → `wss://` and appends `/api/ws?token=YOUR_KEY`.
 
 ## iOS App Installation
 
