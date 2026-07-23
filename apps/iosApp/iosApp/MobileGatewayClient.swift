@@ -1,5 +1,19 @@
 import Foundation
 
+final class InsecureURLSessionDelegate: NSObject, URLSessionDelegate {
+    func urlSession(_ session: URLSession,
+                    didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
+            if let trust = challenge.protectionSpace.serverTrust {
+                completionHandler(.useCredential, URLCredential(trust: trust))
+                return
+            }
+        }
+        completionHandler(.performDefaultHandling, nil)
+    }
+}
+
 struct MobileStatus: Decodable {
     let nodeId: String
     let nodeName: String
@@ -146,13 +160,20 @@ final class MobileGatewayClient {
     private let encoder: JSONEncoder
     var onUnauthorized: (() async -> Void)?
 
-    init(baseURL: String, session: URLSession = .shared) {
+    init(baseURL: String, session: URLSession? = nil) {
         var normalized = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         while normalized.hasSuffix("/") {
             normalized.removeLast()
         }
         self.baseURL = URL(string: normalized) ?? URL(string: "http://127.0.0.1:8765")!
-        self.session = session
+        if let session {
+            self.session = session
+        } else {
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 10
+            let delegate = InsecureURLSessionDelegate()
+            self.session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+        }
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -360,11 +381,15 @@ final class MobileGatewayClient {
         guard (200..<300).contains(code) else {
             throw MobileGatewayError.badStatus(code)
         }
-        return try decoder.decode(T.self, from: data)
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            throw MobileGatewayError.invalidURL
+        }
     }
 
     private func sendEmpty(_ request: URLRequest) async throws {
-        let (_, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(code) else {
             throw MobileGatewayError.badStatus(code)

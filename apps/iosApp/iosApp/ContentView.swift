@@ -55,13 +55,14 @@ struct ContentView: View {
     @State private var isLoadingApprovals = false
     @State private var isLoadingArtifacts = false
     @State private var toast: ToastMessage?
+    @State private var wsClient: HermesWSClient?
     @State private var searchText = ""
     @State private var isShowingSettings = false
     @FocusState private var inputFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
     private var isConnected: Bool {
-        !deviceId.isEmpty && !deviceToken.isEmpty
+        !deviceToken.isEmpty || wsClient?.isConnected == true
     }
 
     var body: some View {
@@ -144,7 +145,10 @@ struct ContentView: View {
 
                     VStack(spacing: 10) {
                         desktopField(title: "GATEWAY", text: $gatewayInput, placeholder: "http://127.0.0.1:8765", systemImage: "network")
-                        desktopField(title: "DEVICE", text: $deviceName, placeholder: "Ray iPhone", systemImage: "iphone")
+                        desktopField(title: "API KEY", text: Binding(
+                            get: { KeychainHelper.load(key: "device_token") ?? "" },
+                            set: { KeychainHelper.save($0, key: "device_token") }
+                        ), placeholder: "Your Hermes API key", systemImage: "key.fill")
                     }
 
                     Button {
@@ -1882,22 +1886,69 @@ struct ContentView: View {
         statusMessage = "Connecting..."
         do {
             let url = normalized(gatewayInput)
-            let client = MobileGatewayClient(baseURL: url)
-            let status = try await client.status()
-            let pairing = try await client.startPairing()
-            let completed = try await client.completePairing(code: pairing.code, deviceName: deviceName.isEmpty ? UIDevice.current.name : deviceName, platform: "ios")
+            guard !url.isEmpty else {
+                statusMessage = "Please enter a gateway URL"
+                isConnecting = false
+                return
+            }
+            guard url.hasPrefix("http://") || url.hasPrefix("https://") else {
+                statusMessage = "URL must start with http:// or https://"
+                isConnecting = false
+                return
+            }
+            guard URL(string: url) != nil else {
+                statusMessage = "Invalid URL format"
+                isConnecting = false
+                return
+            }
+            let token = deviceToken.isEmpty ? (KeychainHelper.load(key: "device_token") ?? "") : deviceToken
+            guard !token.isEmpty else {
+                statusMessage = "No auth token. Enter your Hermes API key."
+                isConnecting = false
+                return
+            }
+            let client = HermesWSClient(baseURL: url)
+            try await client.connect(token: token)
+            wsClient = client
             gatewayBaseUrl = url
-            deviceId = completed.deviceId
-            deviceToken = completed.deviceToken
-            KeychainHelper.save(completed.deviceId, key: "device_id")
-            KeychainHelper.save(completed.deviceToken, key: "device_token")
-            nodeName = status.nodeName
-            statusMessage = "Connected to \(status.nodeName)"
-            await loadHome()
+            nodeName = url.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "http://", with: "")
+            statusMessage = "Connected"
+            await loadHomeViaWS()
+        } catch let error as URLError {
+            switch error.code {
+            case .cannotFindHost, .cannotConnectToHost:
+                statusMessage = "Cannot reach gateway. Check URL and network."
+            case .timedOut:
+                statusMessage = "Connection timed out."
+            case .notConnectedToInternet:
+                statusMessage = "No internet connection."
+            default:
+                statusMessage = "Network error: \(error.localizedDescription)"
+            }
         } catch {
             statusMessage = error.localizedDescription
         }
         isConnecting = false
+    }
+
+    private func loadHomeViaWS() async {
+        guard let ws = wsClient, ws.isConnected else { return }
+        do {
+            let result = try await ws.call("session.list", params: ["limit": 50])
+            if let sessionsArray = (result as? [String: Any])?["sessions"] as? [[String: Any]] {
+                sessions = sessionsArray.compactMap { dict in
+                    let id = dict["id"] as? String ?? ""
+                    let title = dict["title"] as? String ?? "Untitled"
+                    let startedAt = dict["started_at"] as? Double ?? 0
+                    let endedAt = dict["ended_at"] as? Double
+                    let status = endedAt == nil ? "active" : "completed"
+                    let dateStr = String(format: "%.0f", startedAt)
+                    return SessionSummary(id: id, title: title, status: status, createdAt: dateStr, updatedAt: dateStr)
+                }
+            }
+        } catch {
+            statusMessage = "Failed to load sessions: \(error.localizedDescription)"
+        }
     }
 
     private func loadHome() async {
