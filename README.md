@@ -1,266 +1,98 @@
 # Nexus
 
-A native iOS app for managing AI agents powered by Hermes Agent. Create persistent agents, chat with them via Hermes LLM, manage agent servers, and monitor sessions — all from your phone.
+A native iOS app for managing AI agents powered by Hermes Agent. Connect directly to your Hermes gateway via WebSocket, chat with agents, browse sessions, and monitor tasks — all from your phone.
 
 ## Features
 
-- **Agent Server Management** — Add, edit, and remove Hermes agent servers with custom names and URLs
-- **Persistent Agents** — Create AI agents with custom icons, names, and descriptions. Each agent maintains conversation context via Hermes sessions
-- **Real LLM Chat** — Messages route through Hermes API server (OpenAI-compatible endpoint), with session continuity via `X-Hermes-Session-Id`
-- **Session Timeline** — View Hermes session execution timelines with tool calls, thinking blocks, and results
-- **Inbox** — Active tasks (running Hermes sessions) and pending approvals
-- **Cron Jobs** — View scheduled tasks from Hermes
-- **Markdown Rendering** — Full markdown support in chat: headings, bold, italic, inline code, code blocks with syntax highlighting, ordered/unordered lists, blockquotes, dividers
-- **Code Highlighting** — Syntax highlighting for code blocks (Swift, Python, Rust, Go, C/C++, Bash) with copy button and horizontal scroll
-- **Toast Notifications** — Success/error feedback for all operations
-- **Secure Storage** — Device tokens stored in iOS Keychain
-- **Auto-Reconnect** — Automatically re-pairs with gateway on token expiration
+- **WebSocket Connection** — Direct JSON-RPC over WebSocket to Hermes gateway, no intermediate server needed
+- **Session Management** — Browse and resume Hermes sessions with full timeline view
+- **Agent Chat** — Send messages to Hermes agents with streaming response support
+- **Real-time Events** — Live tool call updates, approval requests, and session status via WebSocket
+- **Markdown Rendering** — Headings, bold, italic, code blocks with syntax highlighting, lists, blockquotes, links
+- **Dark Mode** — Full dark mode support following system appearance
+- **Secure Storage** — API keys stored in iOS Keychain
+- **Auto-Reconnect** — Automatically reconnects on connection drops
 
 ## Requirements
 
 - iOS 16.0+
 - Xcode 15+ or Swift 5.9+
-- Python 3.11+
-- Hermes Agent with API server platform enabled
+- Hermes Agent with dashboard server enabled
+- Caddy (or any HTTPS reverse proxy) for TLS termination
 
 ## Architecture
 
 ```
-┌──────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Nexus iOS   │────▶│  Mobile Gateway   │────▶│  Hermes API     │
-│  (SwiftUI)   │HTTP │  (FastAPI:8765)   │HTTP │  Server (8642)  │
-└──────────────┘     └──────────────────┘     └─────────────────┘
-                            │                        │
-                            ▼                        ▼
-                     ┌──────────────┐        ┌──────────────┐
-                     │  state.db    │        │  LLM (Ollama │
-                     │  (SQLite)    │        │  Cloud/API)  │
-                     └──────────────┘        └──────────────┘
+┌──────────────┐     WSS/JSON-RPC     ┌──────────────────┐
+│  Nexus iOS   │◄────────────────────►│  Caddy (TLS)     │
+│  (SwiftUI)   │     wss://host:8444  │  :8444           │
+└──────────────┘                      └────────┬─────────┘
+                                               │ reverse proxy
+                                               ▼
+                                      ┌──────────────────┐
+                                      │  Hermes Dashboard│
+                                      │  (:8080 /api/ws) │
+                                      └────────┬─────────┘
+                                               │
+                                               ▼
+                                      ┌──────────────────┐
+                                      │  Hermes Agent    │
+                                      │  (LLM + tools)   │
+                                      └──────────────────┘
 ```
 
-- **iOS App** (SwiftUI): Connect view, agent server list, agent chat, session timeline, inbox
-- **Mobile Gateway** (FastAPI, port 8765): Pairing, device auth, CRUD for agents/sessions/cron/approvals. Reads/writes Hermes `state.db` directly
-- **Hermes API Server** (port 8642): OpenAI-compatible `/v1/chat/completions` endpoint with session continuity. Part of Hermes Agent core
+- **iOS App** (SwiftUI): WebSocket JSON-RPC client, chat UI, session browser
+- **Caddy**: TLS termination with self-signed certificates, reverse proxy to dashboard
+- **Hermes Dashboard** (`hermes dashboard`): WebSocket endpoint `/api/ws` with JSON-RPC methods (`session.list`, `prompt.submit`, `approval.respond`, etc.)
 
 ## Server-Side Setup
 
-Nexus needs two backend services running: the **Mobile Gateway** (this repo) and the **Hermes API Server** (part of Hermes Agent).
+### 1. Start Hermes Dashboard
 
-### 1. Install Hermes Agent
-
-```bash
-# Using pipx (recommended)
-pipx install hermes-agent
-
-# Or if already installed, ensure it's up to date
-pipx upgrade hermes-agent
-```
-
-Verify installation:
-
-```bash
-hermes --version
-```
-
-### 2. Enable Hermes API Server
-
-The API server is what Nexus calls to get LLM responses. It runs on port 8642 by default.
-
-```bash
-# Enable the API server platform
-hermes config set gateway.platforms.api_server.enabled true
-
-# Set the API server key (used for authentication)
-echo 'API_SERVER_KEY=your-secret-key-here' >> ~/.hermes/.env
-
-# Restart Hermes gateway to apply
-hermes gateway restart
-```
-
-Verify the API server is running:
-
-```bash
-# Should return 401 (auth required = server is up)
-curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8642/v1/models
-
-# With auth — should return model list
-curl http://127.0.0.1:8642/v1/models \
-  -H "Authorization: Bearer your-secret-key-here"
-```
-
-### 3. Set Up the Mobile Gateway
-
-The Mobile Gateway is a standalone FastAPI server included in this repo. It handles device pairing, agent CRUD, session management, and proxies chat messages to the Hermes API server.
-
-#### 3a. Install Dependencies
-
-```bash
-cd /path/to/hermes-mobile
-
-# Install dependencies (Python 3.11+ required)
-pip3.11 install fastapi uvicorn httpx pydantic pyyaml
-```
-
-Dependencies:
-
-| Package | Purpose |
-|---------|---------|
-| `fastapi` | Web framework for the gateway API |
-| `uvicorn` | ASGI server |
-| `httpx` | HTTP client to call Hermes API server |
-| `pydantic` | Data validation / models |
-| `pyyaml` | Config parsing (`~/.hermes/config.yaml`) |
-
-#### 3b. Start the Mobile Gateway
-
-**Option A: Direct run (foreground)**
-
-```bash
-cd /path/to/hermes-mobile
-
-HERMES_MOBILE_USE_STATE_DB=1 \
-  python3.11 -m uvicorn \
-  backend_plugin.hermes_mobile.server:app \
-  --host 0.0.0.0 \
-  --port 8765
-```
-
-**Option B: Background with nohup**
-
-```bash
-HERMES_MOBILE_USE_STATE_DB=1 \
-  nohup python3.11 -m uvicorn \
-  backend_plugin.hermes_mobile.server:app \
-  --host 0.0.0.0 --port 8765 \
-  > /tmp/mobile-gateway.log 2>&1 &
-```
-
-**Option C: launchd persistent service**
-
-Create `~/Library/LaunchAgents/com.rayjun.nexus.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.rayjun.nexus</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/local/bin/python3.11</string>
-    <string>-m</string>
-    <string>uvicorn</string>
-    <string>backend_plugin.hermes_mobile.server:app</string>
-    <string>--host</string>
-    <string>0.0.0.0</string>
-    <string>--port</string>
-    <string>8765</string>
-  </array>
-  <key>WorkingDirectory</key>
-  <string>/path/to/hermes-mobile</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>HERMES_MOBILE_USE_STATE_DB</key>
-    <string>1</string>
-  </dict>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>/tmp/mobile-gateway.log</string>
-  <key>StandardErrorPath</key>
-  <string>/tmp/mobile-gateway.log</string>
-</dict>
-</plist>
-```
-
-```bash
-launchctl load ~/Library/LaunchAgents/com.rayjun.nexus.plist
-```
-
-#### 3c. Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `HERMES_MOBILE_USE_STATE_DB` | **Yes** | — | Set to `1` to use Hermes `state.db` (real data). Without this, the gateway uses a mock store with no persistence |
-| `HERMES_MOBILE_STATE_DB` | No | `~/.hermes/state.db` | Override path to the Hermes state database |
-| `HERMES_MOBILE_BASE_URL` | No | `http://127.0.0.1:8765` | The gateway URL shown in pairing QR code and agent server list |
-| `HERMES_MOBILE_AGENT_NAME` | No | System hostname | Display name for the default agent server |
-| `HERMES_API_URL` | No | `http://127.0.0.1:8642` | Hermes API server URL (for LLM calls) |
-
-Note: Live approval forwarding is enabled by default — no environment variable needed.
-
-#### 3d. Verify the Gateway
-
-```bash
-curl http://127.0.0.1:8765/mobile/v1/status | python3 -m json.tool
-```
-
-Expected output:
-
-```json
-{
-  "node_id": "your-machine",
-  "node_name": "your-machine",
-  "status": "online",
-  "gateway_ready": true,
-  "model": {
-    "provider": "ollama-cloud",
-    "model": "glm-5.2"
-  },
-  ...
-}
-```
-
-```bash
-# Health check
-curl http://127.0.0.1:8765/health
-# {"status":"ok","service":"nexus-gateway","version":"0.1.0"}
-```
-
-### 5. Connect from iPhone
-
-The gateway must be reachable from your iPhone via **HTTPS** (iOS 26+ requires TLS).
-
-#### Set up Caddy reverse proxy (recommended)
-
-Caddy automatically generates self-signed certificates. Install and configure:
-
-```bash
-# Install Caddy (Ubuntu/Debian)
-sudo apt install caddy
-
-# Edit Caddyfile
-sudo nano /etc/caddy/Caddyfile
-```
-
-Add this configuration (replace `100.91.132.51` with your Tailscale IP):
-
-```
-https://100.91.132.51:8443 {
-    reverse_proxy 127.0.0.1:8642
-    tls internal
-}
-```
-
-```bash
-sudo systemctl restart caddy
-```
-
-This proxies HTTPS :8443 → HTTP :8642 (Hermes API server) with a self-signed cert.
-
-#### Set up Hermes Dashboard with WebSocket
-
-The iOS app connects via WebSocket (`/api/ws`). Start the dashboard server:
+The dashboard server provides the `/api/ws` WebSocket endpoint that Nexus connects to:
 
 ```bash
 hermes dashboard --port 8080 --host 0.0.0.0 --insecure
 ```
 
-Add a second Caddy route for WebSocket:
+The `--insecure` flag allows token-based auth without OAuth (suitable for Tailscale/private networks).
+
+Verify it's running:
+
+```bash
+curl -s http://127.0.0.1:8080/api/status
+```
+
+### 2. Set API Server Key
+
+The WebSocket connection authenticates with a token. Set it in Hermes:
+
+```bash
+echo 'API_SERVER_KEY=your-secret-key-here' >> ~/.hermes/.env
+hermes gateway restart
+```
+
+### 3. Set up Caddy HTTPS Reverse Proxy
+
+iOS 26+ requires TLS for all network connections. Caddy provides automatic self-signed certificates.
+
+#### Install Caddy
+
+```bash
+# Ubuntu/Debian
+sudo apt install caddy
+
+# macOS
+brew install caddy
+```
+
+#### Configure Caddy
+
+```bash
+sudo nano /etc/caddy/Caddyfile
+```
+
+Add this configuration (replace `100.91.132.51` with your server's Tailscale IP):
 
 ```
 https://100.91.132.51:8444 {
@@ -269,17 +101,70 @@ https://100.91.132.51:8444 {
 }
 ```
 
-#### In the Nexus app
+- `tls internal` — Caddy generates and manages a self-signed certificate automatically
+- The app's `InsecureURLSessionDelegate` accepts self-signed certs on the iOS side
 
-Enter:
-- **Gateway URL**: `https://100.91.132.51:8444` (dashboard with `/api/ws`)
-- **API Key**: Your `API_SERVER_KEY` from `~/.hermes/.env`
+#### Start Caddy
 
-The app auto-converts `https://` → `wss://` and appends `/api/ws?token=YOUR_KEY`.
+```bash
+sudo systemctl restart caddy
+
+# Or run manually (for testing)
+caddy run --config /etc/caddy/Caddyfile
+```
+
+Verify the proxy works:
+
+```bash
+# Should return a valid response (not a connection error)
+curl -sk https://100.91.132.51:8444/api/status
+```
+
+### 4. Connect from iPhone
+
+In the Nexus app:
+
+1. Enter **Gateway URL**: `https://100.91.132.51:8444`
+2. Enter **API Key**: the value of `API_SERVER_KEY` from `~/.hermes/.env`
+3. Tap **Connect**
+
+The app automatically:
+- Converts `https://` → `wss://`
+- Appends `/api/ws?token=YOUR_KEY`
+- Accepts self-signed certificates via `InsecureURLSessionDelegate`
+
+### 5. (Optional) Run Dashboard as a Service
+
+For production, run the dashboard as a persistent service:
+
+#### systemd (Linux)
+
+Create `/etc/systemd/system/hermes-dashboard.service`:
+
+```ini
+[Unit]
+Description=Hermes Dashboard
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/hermes dashboard --port 8080 --host 0.0.0.0 --insecure
+Restart=always
+RestartSec=5
+User=your-username
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable hermes-dashboard
+sudo systemctl start hermes-dashboard
+```
 
 ## iOS App Installation
 
-### Build & Run
+### Build & Run (Simulator)
 
 ```bash
 cd apps/iosApp
@@ -290,8 +175,6 @@ open iosApp.xcodeproj
 ### Install to Simulator (CLI)
 
 ```bash
-cd /path/to/hermes-mobile
-
 # Build
 xcodebuild -project apps/iosApp/iosApp.xcodeproj \
   -scheme iosApp \
@@ -300,72 +183,79 @@ xcodebuild -project apps/iosApp/iosApp.xcodeproj \
   build
 
 # Install and launch
-APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-*/Build/Products/Debug-iphonesimulator/iosApp.app -maxdepth 0 | head -1)
-
-# Get simulator ID
 SIM_ID=$(xcrun simctl list devices booted | grep "iPhone" | grep -oE '[0-9A-F-]{36}')
-
+APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-*/Build/Products/Debug-iphonesimulator/iosApp.app -maxdepth 0 | head -1)
 xcrun simctl install "$SIM_ID" "$APP_PATH"
 xcrun simctl launch "$SIM_ID" com.rayjun.nexus
 ```
 
+### Install to Real Device
+
+```bash
+# Build for device
+xcodebuild -project apps/iosApp/iosApp.xcodeproj \
+  -scheme iosApp \
+  -configuration Debug \
+  -destination 'id=YOUR_DEVICE_UDID' \
+  DEVELOPMENT_TEAM=YOUR_TEAM_ID \
+  CODE_SIGN_STYLE=Automatic \
+  -allowProvisioningUpdates \
+  build
+
+# Install
+xcrun devicectl device install app --device YOUR_DEVICE_UDID \
+  build/ios-device-derived/Build/Products/Debug-iphoneos/iosApp.app
+
+# Launch
+xcrun devicectl device process launch --device YOUR_DEVICE_UDID com.rayjun.nexus
+```
+
+After first install, trust the developer certificate:
+**Settings → General → VPN & Device Management → Trust Developer Certificate**
+
 ## Troubleshooting
 
-### Agent chat returns "Internal Server Error"
+### "Cannot reach gateway"
 
-The mobile gateway process may be stale. Restart it:
+- Verify Caddy is running: `sudo systemctl status caddy`
+- Verify dashboard is running: `curl http://127.0.0.1:8080/api/status`
+- Check Tailscale connectivity: `tailscale status`
+- Ensure the API key matches `~/.hermes/.env`
 
-```bash
-# Find and kill old process
-ps aux | grep 'hermes_mobile.server' | grep -v grep | awk '{print $2}' | xargs kill
+### "Connection timed out"
 
-# Restart with latest code
-cd /path/to/hermes-mobile
-HERMES_MOBILE_USE_STATE_DB=1 \
-  /tmp/hermes-mobile-venv311/bin/python -m uvicorn \
-  backend_plugin.hermes_mobile.server:app \
-  --host 0.0.0.0 --port 8765
-```
+- Check firewall rules allow port 8444
+- Verify Caddy is listening: `ss -tlnp | grep 8444`
+- Test from another machine: `curl -sk https://YOUR_IP:8444/api/status`
 
-### "API_SERVER_KEY not set in ~/.hermes/.env"
+### "Invalid code signature"
 
-The Hermes API server requires a key. Set it and restart:
+After installing on a real device, trust the developer:
+**Settings → General → VPN & Device Management → Trust Developer Certificate**
 
-```bash
-echo 'API_SERVER_KEY=your-secret-key' >> ~/.hermes/.env
-hermes gateway restart
-```
+### WebSocket connection drops
 
-### "Hermes API server is not running"
-
-The API server on port 8642 is down. Start Hermes:
-
-```bash
-hermes gateway restart
-# Verify
-curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8642/v1/models
-```
-
-### Simulator can't connect to gateway
-
-The iOS Simulator shares the Mac's network, so `127.0.0.1:8765` works for local development. For a physical device, use Tailscale or your Mac's LAN IP.
+The app has built-in auto-reconnect with 30-second ping keepalive. If it keeps dropping:
+- Check server stability: `journalctl -u hermes-dashboard -f`
+- Check Caddy logs: `journalctl -u caddy -f`
 
 ## Running Tests
 
 ```bash
 cd /path/to/hermes-mobile
-python -m pytest tests/ -q
+python3.11 -m pytest tests/ -q
 ```
 
 ## Privacy Policy
 
-Nexus does not collect, transmit, or store any personal data. All communication occurs directly between the app and your self-hosted Hermes Gateway on your local network or Tailscale VPN. No analytics, no telemetry, no third-party SDKs. Device pairing tokens are stored locally in iOS Keychain and never leave the device.
+Nexus does not collect, transmit, or store any personal data. All communication occurs directly between the app and your self-hosted Hermes Gateway via encrypted WebSocket (WSS). No analytics, no telemetry, no third-party SDKs. API keys are stored locally in iOS Keychain and never leave the device.
 
 ## Tech Stack
 
-- **iOS**: SwiftUI, URLSession, Keychain (Security framework)
-- **Backend**: Python 3.11, FastAPI, SQLite (state.db), httpx
-- **LLM**: Hermes API server → any OpenAI-compatible model
+- **iOS**: SwiftUI, URLSession WebSocket, Keychain (Security framework)
+- **Backend**: Hermes Agent dashboard server (WebSocket JSON-RPC)
+- **TLS**: Caddy reverse proxy with self-signed certificates
+- **LLM**: Hermes Agent → any OpenAI-compatible model
 
 ## License
 
