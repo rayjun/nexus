@@ -90,7 +90,11 @@ struct ContentView: View {
         }
         .onAppear {
             gatewayInput = gatewayBaseUrl
-            apiKeyInput = KeychainHelper.load(key: "device_token") ?? ""
+            #if DEBUG
+            if apiKeyInput.isEmpty {
+                apiKeyInput = "hermes-mobile-local"
+            }
+            #endif
             loadFromCache()
             if isConnected {
                 if wsClient?.isConnected == true {
@@ -99,7 +103,9 @@ struct ContentView: View {
                     Task { await loadHome() }
                 }
             } else {
+                #if DEBUG
                 Task { await connect() }
+                #endif
             }
         }
         .onChange(of: scenePhase) { phase in
@@ -1924,8 +1930,10 @@ struct ContentView: View {
                 isConnecting = false
                 return
             }
+            print("[Nexus] connect: url=\(url) token=\(token.prefix(5))...")
             let client = HermesWSClient(baseURL: url)
             try await client.connect(token: token)
+            print("[Nexus] connect: WS connected, loading home...")
             wsClient = client
             gatewayBaseUrl = url
             deviceToken = token
@@ -1945,8 +1953,11 @@ struct ContentView: View {
             )
             agents = [server]
             selectedAgentServer = server
+            print("[Nexus] connect: calling loadHomeViaWS...")
             await loadHomeViaWS()
+            print("[Nexus] connect: loadHomeViaWS done, sessions=\(sessions.count) cron=\(cronJobs.count)")
         } catch let error as URLError {
+            print("[Nexus] connect URLError: \(error.code)")
             switch error.code {
             case .cannotFindHost, .cannotConnectToHost:
                 statusMessage = "Cannot reach gateway. Check URL and network."
@@ -1958,21 +1969,29 @@ struct ContentView: View {
                 statusMessage = "Network error: \(error.localizedDescription)"
             }
         } catch {
+            print("[Nexus] connect error: \(error)")
             statusMessage = error.localizedDescription
         }
         isConnecting = false
     }
 
     private func loadHomeViaWS() async {
-        guard let ws = wsClient, ws.isConnected else { return }
+        guard let ws = wsClient, ws.isConnected else {
+            print("[Nexus] loadHomeViaWS: wsClient nil or not connected")
+            return
+        }
+        print("[Nexus] loadHomeViaWS: starting")
         isLoadingSessions = true
         isLoadingCron = true
         isLoadingApprovals = true
         isLoadingPersistentAgents = true
         do {
             // Load sessions
+            print("[Nexus] loadHomeViaWS: calling session.list...")
             let sessionsResult = try await ws.call("session.list", params: ["limit": 50])
+            print("[Nexus] loadHomeViaWS: session.list response received")
             if let sessionsArray = (sessionsResult as? [String: Any])?["sessions"] as? [[String: Any]] {
+                print("[Nexus] loadHomeViaWS: parsed \(sessionsArray.count) sessions")
                 sessions = sessionsArray.compactMap { dict in
                     let id = dict["id"] as? String ?? ""
                     let title = dict["title"] as? String ?? "Untitled"
@@ -1982,6 +2001,8 @@ struct ContentView: View {
                     let dateStr = String(format: "%.0f", startedAt)
                     return SessionSummary(id: id, title: title, status: status, createdAt: dateStr, updatedAt: dateStr)
                 }
+            } else {
+                print("[Nexus] loadHomeViaWS: sessions parse failed, result type: \(type(of: sessionsResult))")
             }
 
             // Update server info from session list
