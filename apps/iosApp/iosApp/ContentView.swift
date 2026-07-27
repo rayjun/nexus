@@ -2,10 +2,10 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
-    @AppStorage("gateway_base_url") private var gatewayBaseUrl = "http://127.0.0.1:8765"
+    @AppStorage("gateway_base_url") private var gatewayBaseUrl = "http://127.0.0.1:8080"
     @State private var deviceId = KeychainHelper.load(key: "device_id")
     @State private var deviceToken = KeychainHelper.load(key: "device_token")
-    @State private var gatewayInput = "http://127.0.0.1:8765"
+    @State private var gatewayInput = "http://127.0.0.1:8080"
     @State private var deviceName = UIDevice.current.name
     @State private var statusMessage = ""
     @State private var nodeName = ""
@@ -55,6 +55,7 @@ struct ContentView: View {
     @State private var isLoadingApprovals = false
     @State private var isLoadingArtifacts = false
     @State private var toast: ToastMessage?
+    @State private var apiKeyInput = ""
     @State private var wsClient: HermesWSClient?
     @State private var searchText = ""
     @State private var isShowingSettings = false
@@ -89,16 +90,25 @@ struct ContentView: View {
         }
         .onAppear {
             gatewayInput = gatewayBaseUrl
+            apiKeyInput = KeychainHelper.load(key: "device_token") ?? ""
             loadFromCache()
             if isConnected {
-                Task { await loadHome() }
+                if wsClient?.isConnected == true {
+                    Task { await loadHomeViaWS() }
+                } else {
+                    Task { await loadHome() }
+                }
             } else {
                 Task { await connect() }
             }
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active && isConnected && agents.isEmpty {
-                Task { await loadHome() }
+                if wsClient?.isConnected == true {
+                    Task { await loadHomeViaWS() }
+                } else {
+                    Task { await loadHome() }
+                }
             }
         }
         .sheet(isPresented: $isShowingComposer) {
@@ -137,18 +147,15 @@ struct ContentView: View {
                             Text("Connect to Hermes")
                                 .font(.system(size: 22, weight: .semibold))
                                 .foregroundStyle(NexusStyle.text)
-                            Text("Pair this iPhone with your local Hermes gateway.")
+                            Text("Connect to your Hermes gateway via WebSocket.")
                                 .font(.system(size: 14))
                                 .foregroundStyle(NexusStyle.muted)
                         }
                     }
 
                     VStack(spacing: 10) {
-                        desktopField(title: "GATEWAY", text: $gatewayInput, placeholder: "http://127.0.0.1:8765", systemImage: "network")
-                        desktopField(title: "API KEY", text: Binding(
-                            get: { KeychainHelper.load(key: "device_token") ?? "" },
-                            set: { KeychainHelper.save($0, key: "device_token") }
-                        ), placeholder: "Your Hermes API key", systemImage: "key.fill")
+                        desktopField(title: "GATEWAY", text: $gatewayInput, placeholder: "https://your-server:8444", systemImage: "network")
+                        desktopField(title: "API KEY", text: $apiKeyInput, placeholder: "Your Hermes API key", systemImage: "key.fill")
                     }
 
                     Button {
@@ -237,7 +244,11 @@ struct ContentView: View {
                         .foregroundStyle(NexusStyle.text)
                     Spacer()
                     Button {
-                        Task { await loadHome() }
+                        if wsClient?.isConnected == true {
+                            Task { await loadHomeViaWS() }
+                        } else {
+                            Task { await loadHome() }
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 16, weight: .semibold))
@@ -320,7 +331,13 @@ struct ContentView: View {
             .padding(.bottom, 28)
         }
         .background(NexusStyle.background)
-        .refreshable { await loadHome() }
+        .refreshable {
+            if wsClient?.isConnected == true {
+                await loadHomeViaWS()
+            } else {
+                await loadHome()
+            }
+        }
         .sheet(isPresented: $isShowingAddServer) {
             addServerSheet
         }
@@ -1901,7 +1918,7 @@ struct ContentView: View {
                 isConnecting = false
                 return
             }
-            let token = deviceToken.isEmpty ? (KeychainHelper.load(key: "device_token") ?? "") : deviceToken
+            let token = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !token.isEmpty else {
                 statusMessage = "No auth token. Enter your Hermes API key."
                 isConnecting = false
@@ -1911,8 +1928,23 @@ struct ContentView: View {
             try await client.connect(token: token)
             wsClient = client
             gatewayBaseUrl = url
+            deviceToken = token
+            KeychainHelper.save(token, key: "device_token")
             nodeName = url.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "http://", with: "")
             statusMessage = "Connected"
+
+            let server = AgentInfo(
+                id: "hermes-ws",
+                name: nodeName.isEmpty ? "Hermes Gateway" : nodeName,
+                baseUrl: url,
+                status: "online",
+                profile: "default",
+                model: "default",
+                createdAt: String(Int(Date().timeIntervalSince1970)),
+                lastSeenAt: nil
+            )
+            agents = [server]
+            selectedAgentServer = server
             await loadHomeViaWS()
         } catch let error as URLError {
             switch error.code {
@@ -1933,9 +1965,14 @@ struct ContentView: View {
 
     private func loadHomeViaWS() async {
         guard let ws = wsClient, ws.isConnected else { return }
+        isLoadingSessions = true
+        isLoadingCron = true
+        isLoadingApprovals = true
+        isLoadingPersistentAgents = true
         do {
-            let result = try await ws.call("session.list", params: ["limit": 50])
-            if let sessionsArray = (result as? [String: Any])?["sessions"] as? [[String: Any]] {
+            // Load sessions
+            let sessionsResult = try await ws.call("session.list", params: ["limit": 50])
+            if let sessionsArray = (sessionsResult as? [String: Any])?["sessions"] as? [[String: Any]] {
                 sessions = sessionsArray.compactMap { dict in
                     let id = dict["id"] as? String ?? ""
                     let title = dict["title"] as? String ?? "Untitled"
@@ -1946,9 +1983,70 @@ struct ContentView: View {
                     return SessionSummary(id: id, title: title, status: status, createdAt: dateStr, updatedAt: dateStr)
                 }
             }
+
+            // Update server info from session list
+            if var server = agents.first, sessions.count > 0 {
+                let updated = AgentInfo(
+                    id: server.id,
+                    name: server.name,
+                    baseUrl: server.baseUrl,
+                    status: "online",
+                    profile: server.profile,
+                    model: server.model,
+                    createdAt: server.createdAt,
+                    lastSeenAt: nil
+                )
+                agents = [updated]
+                selectedAgentServer = updated
+            }
+
+            // Load cron jobs
+            let cronResult = try await ws.call("cron.manage", params: ["action": "list"])
+            let cronJobsRaw: [[String: Any]]
+            if let result = cronResult as? [String: Any], let jobs = result["jobs"] as? [[String: Any]] {
+                cronJobsRaw = jobs
+            } else if let result = cronResult as? [[String: Any]] {
+                cronJobsRaw = result
+            } else {
+                cronJobsRaw = []
+            }
+            cronJobs = cronJobsRaw.compactMap { dict in
+                CronJobInfo(
+                    id: dict["job_id"] as? String ?? "",
+                    name: dict["name"] as? String ?? "Unnamed",
+                    schedule: dict["schedule"] as? String ?? "",
+                    enabled: dict["enabled"] as? Bool ?? false,
+                    nextRunAt: dict["next_run_at"] as? String,
+                    lastRun: nil
+                )
+            }
+
+            // Approvals come as events, not a list RPC — start empty
+            approvalList = []
+
+            // Persistent agents — Hermes doesn't have this concept via WS
+            // Show sessions as "agents" for the Agents tab
+            persistentAgents = sessions.prefix(5).compactMap { s in
+                PersistentAgent(
+                    id: s.id,
+                    name: s.title,
+                    description: s.status,
+                    icon: "cpu",
+                    capabilities: [],
+                    linkedSessionIds: [],
+                    createdAt: s.createdAt,
+                    updatedAt: s.updatedAt,
+                    lastMessageAt: nil
+                )
+            }
+
         } catch {
-            statusMessage = "Failed to load sessions: \(error.localizedDescription)"
+            statusMessage = "Failed to load: \(error.localizedDescription)"
         }
+        isLoadingSessions = false
+        isLoadingCron = false
+        isLoadingApprovals = false
+        isLoadingPersistentAgents = false
     }
 
     private func loadHome() async {

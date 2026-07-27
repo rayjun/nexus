@@ -41,25 +41,16 @@ final class HermesWSClient: NSObject, ObservableObject {
         task = session.webSocketTask(with: wsURL)
         task?.resume()
 
-        let connected = try await waitForConnection()
-        if !connected { throw URLError(.cannotConnectToHost) }
-
-        await MainActor.run { self.isConnected = true }
+        // Start receive loop immediately — the first message should be gateway.ready
         startReceiveLoop()
         startPing()
-    }
 
-    private func waitForConnection() async throws -> Bool {
-        guard let task else { return false }
-        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Bool, Error>) in
-            task.sendPing { error in
-                if let error {
-                    cont.resume(throwing: error)
-                } else {
-                    cont.resume(returning: true)
-                }
-            }
+        // Wait briefly for the first event to confirm connection
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        guard task?.closeCode == .invalid else {
+            throw URLError(.cannotConnectToHost)
         }
+        await MainActor.run { self.isConnected = true }
     }
 
     func disconnect() {
