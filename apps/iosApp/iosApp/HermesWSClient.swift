@@ -3,11 +3,12 @@ import Foundation
 final class HermesWSClient: NSObject, ObservableObject {
     private var task: URLSessionWebSocketTask?
     private let session: URLSession
-    private let baseURL: URL
+    private let wsURL: URL
     private var nextId = 0
+    private let pendingLock = NSLock()
     private var pending: [Int: (Result<Any, Error>) -> Void] = [:]
     private var eventHandlers: [(String, (Any) -> Void)] = []
-    private var receiveLoop: Task<Void, Never>?
+    private var receiveTask: Task<Void, Never>?
     private var pingTimer: Timer?
 
     @Published var isConnected = false
@@ -16,14 +17,13 @@ final class HermesWSClient: NSObject, ObservableObject {
         var normalized = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         while normalized.hasSuffix("/") { normalized.removeLast() }
         let wsScheme = normalized.hasPrefix("https") ? "wss" : "ws"
+        var comps: URLComponents? = nil
         if let url = URL(string: normalized) {
-            var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
             comps?.scheme = wsScheme
             comps?.path = "/api/ws"
-            self.baseURL = comps?.url ?? URL(string: "ws://127.0.0.1:8080/api/ws")!
-        } else {
-            self.baseURL = URL(string: "ws://127.0.0.1:8080/api/ws")!
         }
+        self.wsURL = comps?.url ?? URL(string: "ws://127.0.0.1:8080/api/ws")!
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.waitsForConnectivity = false
@@ -32,30 +32,34 @@ final class HermesWSClient: NSObject, ObservableObject {
     }
 
     func connect(token: String) async throws {
-        guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+        guard var comps = URLComponents(url: wsURL, resolvingAgainstBaseURL: false) else {
             throw URLError(.badURL)
         }
         comps.queryItems = [URLQueryItem(name: "token", value: token)]
-        guard let wsURL = comps.url else { throw URLError(.badURL) }
+        guard let url = comps.url else { throw URLError(.badURL) }
 
-        task = session.webSocketTask(with: wsURL)
-        task?.resume()
+        let task = session.webSocketTask(with: url)
+        self.task = task
+        task.resume()
 
-        // Start receive loop immediately — the first message should be gateway.ready
+        // Start receive loop before waiting
         startReceiveLoop()
         startPing()
 
-        // Wait briefly for the first event to confirm connection
-        try await Task.sleep(nanoseconds: 1_000_000_000)
-        guard task?.closeCode == .invalid else {
+        // Give WS 3 seconds to connect; if it closes in that time, it's an auth/network failure
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+
+        // If closeCode is still .invalid, the WS is open (no close happened)
+        if task.closeCode != .invalid {
             throw URLError(.cannotConnectToHost)
         }
+
         await MainActor.run { self.isConnected = true }
     }
 
     func disconnect() {
-        receiveLoop?.cancel()
-        receiveLoop = nil
+        receiveTask?.cancel()
+        receiveTask = nil
         pingTimer?.invalidate()
         pingTimer = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -79,12 +83,14 @@ final class HermesWSClient: NSObject, ObservableObject {
         try await task?.send(msg)
 
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Any, Error>) in
-            self.pending[id] = { result in
+            pendingLock.lock()
+            pending[id] = { result in
                 switch result {
                 case .success(let value): cont.resume(returning: value)
                 case .failure(let error): cont.resume(throwing: error)
                 }
             }
+            pendingLock.unlock()
         }
     }
 
@@ -97,19 +103,19 @@ final class HermesWSClient: NSObject, ObservableObject {
     // MARK: - Private
 
     private func startReceiveLoop() {
-        receiveLoop = Task {
+        receiveTask = Task { [weak self] in
+            guard let self else { return }
             while !Task.isCancelled {
                 do {
-                    let msg = try await task?.receive()
+                    guard let task = self.task else { break }
+                    let msg = try await task.receive()
                     switch msg {
                     case .data(let data):
-                        handleData(data)
+                        self.handleMessage(data)
                     case .string(let str):
                         if let data = str.data(using: .utf8) {
-                            handleData(data)
+                            self.handleMessage(data)
                         }
-                    case .none:
-                        break
                     @unknown default:
                         break
                     }
@@ -122,23 +128,29 @@ final class HermesWSClient: NSObject, ObservableObject {
     }
 
     private func startPing() {
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
-            self.task?.sendPing { _ in }
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.task?.sendPing { _ in }
         }
     }
 
-    private func handleData(_ data: Data) {
+    private func handleMessage(_ data: Data) {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
-        if let id = json["id"] as? Int {
-            if let result = json["result"] {
-                pending[id]?(.success(result))
-            } else if let error = json["error"] {
-                pending[id]?(.failure(NSError(domain: "HermesWS", code: -1, userInfo: [NSLocalizedDescriptionKey: "\(error)"])))
+        // Handle RPC response (has "id" field)
+        if let id = (json["id"] as? NSNumber)?.intValue ?? (json["id"] as? Int) {
+            pendingLock.lock()
+            let handler = pending.removeValue(forKey: id)
+            pendingLock.unlock()
+            if let handler {
+                if let result = json["result"] {
+                    handler(.success(result))
+                } else if let error = json["error"] {
+                    handler(.failure(NSError(domain: "HermesWS", code: -1, userInfo: [NSLocalizedDescriptionKey: "\(error)"])))
+                }
             }
-            pending.removeValue(forKey: id)
         }
 
+        // Handle event (has "method": "event")
         if let method = json["method"] as? String, method == "event" {
             if let params = json["params"] as? [String: Any], let type = params["type"] as? String {
                 for (eventType, handler) in eventHandlers where eventType == type {
