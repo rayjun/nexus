@@ -47,34 +47,43 @@ A native iOS app for managing AI agents powered by Hermes Agent. Connect directl
 
 ## Server-Side Setup
 
-### 1. Start Hermes Dashboard
+### 1. Set Dashboard Session Token
+
+The WebSocket endpoint authenticates with a session token. Set it as an environment variable so the dashboard uses your known token:
+
+```bash
+# Generate a random token (or use your own)
+TOKEN=$(openssl rand -hex 16)
+echo "HERMES_DASHBOARD_SESSION_TOKEN=$TOKEN" >> ~/.hermes/.env
+echo "Your dashboard token: $TOKEN"
+```
+
+### 2. Start Hermes Dashboard
 
 The dashboard server provides the `/api/ws` WebSocket endpoint that Nexus connects to:
 
 ```bash
-hermes dashboard --port 8080 --host 0.0.0.0 --insecure
+# Start with the token set
+export HERMES_DASHBOARD_SESSION_TOKEN="$TOKEN"
+hermes dashboard --port 8080 --host 127.0.0.1 --insecure
 ```
 
-The `--insecure` flag allows token-based auth without OAuth (suitable for Tailscale/private networks).
+- `--host 127.0.0.1` — bind to loopback (Caddy handles external access)
+- `--insecure` — allows token-based auth without OAuth
 
 Verify it's running:
 
 ```bash
-curl -s http://127.0.0.1:8080/api/status
+curl -s http://127.0.0.1:8080/api/status | python3 -m json.tool
 ```
 
-### 2. Set API Server Key
+### 3. Set up Caddy HTTPS Reverse Proxy (WSS)
 
-The WebSocket connection authenticates with a token. Set it in Hermes:
+iOS 26+ requires TLS for all network connections. Caddy provides automatic self-signed certificates and handles the `https://` → `wss://` upgrade transparently.
 
-```bash
-echo 'API_SERVER_KEY=your-secret-key-here' >> ~/.hermes/.env
-hermes gateway restart
 ```
-
-### 3. Set up Caddy HTTPS Reverse Proxy
-
-iOS 26+ requires TLS for all network connections. Caddy provides automatic self-signed certificates.
+iPhone (wss://) ←→ Caddy (TLS :8444) ←→ Hermes Dashboard (HTTP :8080)
+```
 
 #### Install Caddy
 
@@ -102,7 +111,7 @@ https://100.91.132.51:8444 {
 ```
 
 - `tls internal` — Caddy generates and manages a self-signed certificate automatically
-- The app's `InsecureURLSessionDelegate` accepts self-signed certs on the iOS side
+- Caddy automatically upgrades `wss://` WebSocket connections through the reverse proxy
 
 #### Start Caddy
 
@@ -116,8 +125,23 @@ caddy run --config /etc/caddy/Caddyfile
 Verify the proxy works:
 
 ```bash
-# Should return a valid response (not a connection error)
-curl -sk https://100.91.132.51:8444/api/status
+# Should return JSON (not a connection error)
+curl -sk https://100.91.132.51:8444/api/status | python3 -m json.tool
+```
+
+#### How WSS works
+
+The app automatically converts the URL scheme:
+- `https://` → `wss://` (for the WebSocket connection)
+- `http://` → `ws://` (for local simulator testing only)
+
+When you enter `https://100.91.132.51:8444` in the app:
+1. App connects to `wss://100.91.132.51:8444/api/ws?token=YOUR_TOKEN`
+2. Caddy terminates TLS with its self-signed certificate
+3. Caddy proxies the WebSocket to `ws://127.0.0.1:8080/api/ws?token=YOUR_TOKEN`
+4. Hermes dashboard authenticates the token and accepts the connection
+
+The app accepts self-signed certificates via `InsecureURLSessionDelegate` on the iOS side.
 ```
 
 ### 4. Connect from iPhone
@@ -125,13 +149,15 @@ curl -sk https://100.91.132.51:8444/api/status
 In the Nexus app:
 
 1. Enter **Gateway URL**: `https://100.91.132.51:8444`
-2. Enter **API Key**: the value of `API_SERVER_KEY` from `~/.hermes/.env`
+2. Enter **API Key**: the value of `HERMES_DASHBOARD_SESSION_TOKEN` from `~/.hermes/.env` (the token you generated in Step 1)
 3. Tap **Connect**
 
 The app automatically:
 - Converts `https://` → `wss://`
-- Appends `/api/ws?token=YOUR_KEY`
+- Appends `/api/ws?token=YOUR_TOKEN`
 - Accepts self-signed certificates via `InsecureURLSessionDelegate`
+
+> **Note**: The "API Key" field in the app refers to the `HERMES_DASHBOARD_SESSION_TOKEN` value, not `API_SERVER_KEY`. The dashboard server uses the session token for WebSocket authentication.
 
 ### 5. (Optional) Run Dashboard as a Service
 
