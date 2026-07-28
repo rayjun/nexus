@@ -17,21 +17,22 @@ A native iOS app for managing AI agents powered by Hermes Agent. Connect directl
 
 - iOS 16.0+
 - Xcode 15+ or Swift 5.9+
-- Hermes Agent with dashboard server enabled
-- Caddy (or any HTTPS reverse proxy) for TLS termination
+- Hermes Agent v0.19.0+ with dashboard server enabled
+- Nginx or Caddy (any HTTPS/WSS reverse proxy) for TLS termination
 
 ## Architecture
 
 ```
 ┌──────────────┐     WSS/JSON-RPC     ┌──────────────────┐
-│  Nexus iOS   │◄────────────────────►│  Caddy (TLS)     │
-│  (SwiftUI)   │     wss://host:8444  │  :8444           │
+│  Nexus iOS   │◄────────────────────►│  Nginx/Caddy     │
+│  (SwiftUI)   │     wss://host:8444  │  (TLS :8444)     │
 └──────────────┘                      └────────┬─────────┘
                                                │ reverse proxy
                                                ▼
                                       ┌──────────────────┐
                                       │  Hermes Dashboard│
-                                      │  (:8080 /api/ws) │
+                                      │  (127.0.0.1:9119) │
+                                      │  /api/ws          │
                                       └────────┬─────────┘
                                                │
                                                ▼
@@ -42,12 +43,12 @@ A native iOS app for managing AI agents powered by Hermes Agent. Connect directl
 ```
 
 - **iOS App** (SwiftUI): WebSocket JSON-RPC client, chat UI, session browser
-- **Caddy**: TLS termination with self-signed certificates, reverse proxy to dashboard
-- **Hermes Dashboard** (`hermes dashboard`): WebSocket endpoint `/api/ws` with JSON-RPC methods (`session.list`, `prompt.submit`, `approval.respond`, etc.)
+- **Nginx/Caddy**: TLS termination, reverse proxy to loopback Dashboard
+- **Hermes Dashboard** (`hermes dashboard`): WebSocket endpoint `/api/ws` with JSON-RPC methods (`session.list`, `prompt.submit`, `approval.respond`, etc.), bound to `127.0.0.1`
 
 ## Connection Setup
 
-Nexus connects directly to the Hermes Dashboard via WebSocket + JSON-RPC. No standalone backend is required. Below are the complete setup instructions for each deployment scenario.
+Nexus connects to the Hermes Dashboard via WebSocket + JSON-RPC. The Dashboard must bind to loopback (`127.0.0.1`) so that the session token authentication works. A reverse proxy (Nginx or Caddy) provides TLS termination for remote device access.
 
 ### Why Dashboard Instead of API Server
 
@@ -70,40 +71,82 @@ Nexus is a Hermes native mobile client. It requires real-time event push, stream
 
 Nexus uses **`HERMES_DASHBOARD_SESSION_TOKEN`**, not `API_SERVER_KEY`. These are completely independent authentication systems and are not interchangeable.
 
-### Scenario 1: Remote Device via Caddy WSS
+### Important: Dashboard Must Bind to Loopback
 
-iOS 26+ requires TLS for all network connections. A remote device needs Caddy as an HTTPS/WSS reverse proxy.
+Since Hermes v0.19.0, the `--insecure` flag is a **no-op** for non-loopback binds. The auth gate is determined solely by the bind host:
 
-```
-iPhone (wss://) ←→ Caddy (TLS :8444) ←→ Hermes Dashboard (HTTP :8080)
-```
+- **`127.0.0.1` / `localhost` / `::1`** → loopback mode, `?token=` authentication works
+- **Any other address** (`0.0.0.0`, Tailscale IP, LAN IP) → gated mode, forces OAuth or password auth, `?token=` is rejected
 
-#### 1. Generate Token and Start Dashboard on the Server
+This means the Dashboard **must** bind to `127.0.0.1`. External access is provided by a reverse proxy (Nginx or Caddy) that terminates TLS and forwards to the loopback Dashboard. This is the only supported topology for Nexus.
+
+### Step 1: Generate Dashboard Token and Start Dashboard
+
+On the server:
 
 ```bash
 TOKEN=$(openssl rand -hex 16)
 echo "HERMES_DASHBOARD_SESSION_TOKEN=$TOKEN" >> ~/.hermes/.env
 export HERMES_DASHBOARD_SESSION_TOKEN="$TOKEN"
-hermes dashboard --port 8080 --host 127.0.0.1 --insecure
+hermes dashboard --port 9119 --host 127.0.0.1
 ```
 
-The Dashboard binds to loopback; Caddy handles external TLS.
+- `--host 127.0.0.1` — bind to loopback (required for token auth)
+- `--insecure` is not needed and is ignored for loopback binds
+- Port `9119` is an example; any free port works
 
-#### 2. Install and Configure Caddy
+Verify:
 
 ```bash
-# Ubuntu/Debian
-sudo apt install caddy
-
-# macOS
-brew install caddy
+curl -s http://127.0.0.1:9119/api/status | python3 -m json.tool
 ```
 
-Edit the Caddyfile (replace the IP with your server's address):
+Should return `"gateway_state": "running"` and `"overall": "ok"`.
+
+### Step 2: Configure Reverse Proxy (TLS)
+
+iOS 26+ requires TLS for all network connections. Use Nginx or Caddy to terminate TLS and proxy to the loopback Dashboard.
+
+#### Option A: Nginx
+
+```nginx
+server {
+    listen 8444 ssl;
+    server_name YOUR_SERVER_IP;
+
+    ssl_certificate     /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:9119;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+For self-signed certificates, generate one:
+
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout /path/to/key.pem \
+  -out /path/to/cert.pem -days 365 -nodes \
+  -subj "/CN=YOUR_SERVER_IP"
+```
+
+Start Nginx:
+
+```bash
+sudo nginx -t && sudo systemctl restart nginx
+```
+
+#### Option B: Caddy
 
 ```
 https://YOUR_SERVER_IP:8444 {
-    reverse_proxy 127.0.0.1:8080
+    reverse_proxy 127.0.0.1:9119
     tls internal
 }
 ```
@@ -119,13 +162,17 @@ sudo systemctl restart caddy
 caddy run --config /etc/caddy/Caddyfile
 ```
 
-Verify the proxy:
+#### Verify the Proxy
 
 ```bash
 curl -sk https://YOUR_SERVER_IP:8444/api/status | python3 -m json.tool
 ```
 
-#### 3. Connect from Nexus
+Should return the same result as the loopback curl in Step 1.
+
+### Step 3: Connect from Nexus
+
+In the Nexus app:
 
 - **GATEWAY**: `https://YOUR_SERVER_IP:8444`
 - **API KEY**: the `HERMES_DASHBOARD_SESSION_TOKEN` value you generated
@@ -134,45 +181,23 @@ curl -sk https://YOUR_SERVER_IP:8444/api/status | python3 -m json.tool
 The app automatically:
 1. Converts `https://` → `wss://`
 2. Appends `/api/ws?token=YOUR_TOKEN`
-3. Caddy terminates TLS and proxies to `ws://127.0.0.1:8080/api/ws?token=YOUR_TOKEN`
-4. Dashboard validates the token and accepts the connection
+3. Nginx/Caddy terminates TLS and proxies to `ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN`
+4. Dashboard validates the token (loopback mode) and accepts the connection
 5. The app accepts self-signed certificates via `InsecureURLSessionDelegate`
-
-### Scenario 2: Tailscale Direct (Recommended, Simplest)
-
-If both your device and server are on the same Tailscale network, you can connect directly without Caddy.
-
-#### 1. Start Dashboard Bound to the Tailscale Interface
-
-```bash
-export HERMES_DASHBOARD_SESSION_TOKEN="$TOKEN"
-hermes dashboard --port 8080 --host 0.0.0.0 --insecure
-```
-
-- `--host 0.0.0.0` — allow access from the Tailscale interface
-- The Tailscale network itself is the authentication boundary; no additional TLS needed
-
-#### 2. Connect from Nexus
-
-- **GATEWAY**: `http://YOUR_TAILSCALE_IP:8080`
-- **API KEY**: the token you generated
-- Tap **Connect**
-
-> **Note**: Tailscale provides an encrypted tunnel, so HTTP/WS is sufficient at the application layer. ATS allows arbitrary loads. However, iOS ATS may still restrict non-localhost HTTP connections in some cases — if the connection fails, use Caddy to provide HTTPS instead.
 
 ### Authentication How It Works
 
 Dashboard WebSocket authentication logic (from `web_server.py`, `_ws_auth_reason`):
 
-1. **Loopback / `--insecure` mode** (Scenario 2):
+1. **Loopback mode** (`--host 127.0.0.1`):
    - Client sends `?token=<HERMES_DASHBOARD_SESSION_TOKEN>`
    - Server compares with `hmac.compare_digest` (constant-time)
    - Match → accept; mismatch → close with code 4401
 
-2. **Gated mode** (public bind without `--insecure`):
-   - The `?token=` path is unconditionally rejected
+2. **Gated mode** (any non-loopback bind, including `0.0.0.0` and Tailscale IPs):
+   - `?token=` is unconditionally rejected (since v0.19.0, `--insecure` no longer bypasses this)
    - Replaced with single-use tickets (30s TTL) or an internal credential
-   - **Nexus does not support this mode** — ensure Dashboard runs with `--insecure` or loopback + Caddy
+   - **Nexus does not support this mode** — always bind Dashboard to `127.0.0.1` and use a reverse proxy
 
 3. **Why not use `API_SERVER_KEY` directly**:
    - The Dashboard does not check `API_SERVER_KEY`; they are independent auth systems
@@ -191,7 +216,7 @@ After=network.target
 [Service]
 Type=simple
 Environment=HERMES_DASHBOARD_SESSION_TOKEN=YOUR_TOKEN
-ExecStart=/usr/local/bin/hermes dashboard --port 8080 --host 127.0.0.1 --insecure
+ExecStart=/usr/local/bin/hermes dashboard --port 9119 --host 127.0.0.1
 Restart=always
 RestartSec=5
 User=your-username
@@ -209,8 +234,8 @@ sudo systemctl start hermes-dashboard
 
 After setup, verify in order:
 
-1. **Dashboard running**: `curl -s http://127.0.0.1:8080/api/status` → `"gateway_state": "running"`
-2. **Caddy proxy** (remote scenario): `curl -sk https://YOUR_IP:8444/api/status` → same result
+1. **Dashboard running**: `curl -s http://127.0.0.1:9119/api/status` → `"gateway_state": "running"`
+2. **Reverse proxy**: `curl -sk https://YOUR_IP:8444/api/status` → same result
 3. **Token correct**: App's API KEY matches `HERMES_DASHBOARD_SESSION_TOKEN` in `~/.hermes/.env`
 4. **WebSocket connected**: App logs show `gateway.ready` and `session.list` RPC success
 5. **Data loaded**: Sessions tab shows session list, Agents tab shows agent list
@@ -245,22 +270,21 @@ After first install, trust the developer certificate:
 
 ### "Cannot reach gateway"
 
-- Verify Dashboard is running: `curl -s http://127.0.0.1:8080/api/status`
-- Verify Caddy is running (remote scenario): `sudo systemctl status caddy`
-- Check Tailscale connectivity: `tailscale status`
+- Verify Dashboard is running: `curl -s http://127.0.0.1:9119/api/status`
+- Verify reverse proxy is running: `sudo systemctl status nginx` (or `caddy`)
 - Ensure the App's API KEY matches `HERMES_DASHBOARD_SESSION_TOKEN` in `~/.hermes/.env`
 
 ### "Connection timed out"
 
 - Check firewall rules allow port 8444
-- Verify Caddy is listening: `ss -tlnp | grep 8444`
+- Verify Nginx/Caddy is listening: `ss -tlnp | grep 8444`
 - Test from another device: `curl -sk https://YOUR_IP:8444/api/status`
 
 ### "WebSocket immediately closes (code 4401)"
 
 - 4401 = authentication failure
 - Ensure the token value matches exactly — no extra spaces or newlines
-- Ensure Dashboard started with `--insecure` (in gated mode, `?token=` is rejected)
+- Ensure Dashboard is bound to `127.0.0.1` (non-loopback binds force gated mode and reject `?token=`)
 - Check that `HERMES_DASHBOARD_SESSION_TOKEN` in `~/.hermes/.env` matches what was used at startup
 
 ### "code = 4001 session not found"
@@ -277,7 +301,7 @@ After installing on a real device, trust the developer:
 
 The app has built-in auto-reconnect with 30-second ping keepalive. If it keeps dropping:
 - Check Dashboard stability: `journalctl -u hermes-dashboard -f`
-- Check Caddy logs: `journalctl -u caddy -f`
+- Check reverse proxy logs: `journalctl -u nginx -f` (or `journalctl -u caddy -f`)
 
 ## Privacy Policy
 
@@ -286,8 +310,8 @@ Nexus does not collect, transmit, or store any personal data. All communication 
 ## Tech Stack
 
 - **iOS**: SwiftUI, URLSession WebSocket, Keychain (Security framework)
-- **Backend**: Hermes Agent dashboard server (WebSocket JSON-RPC)
-- **TLS**: Caddy reverse proxy with self-signed certificates
+- **Backend**: Hermes Agent dashboard server (WebSocket JSON-RPC, loopback bind)
+- **TLS**: Nginx or Caddy reverse proxy with self-signed certificates
 - **LLM**: Hermes Agent → any OpenAI-compatible model
 
 ## License
