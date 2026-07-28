@@ -97,24 +97,12 @@ struct ContentView: View {
             #endif
             loadFromCache()
             if isConnected {
-                if wsClient?.isConnected == true {
-                    Task { await loadHomeViaWS() }
-                } else {
-                    Task { await loadHome() }
-                }
-            } else {
-                #if DEBUG
-                Task { await connect() }
-                #endif
+                Task { await loadHomeViaWS() }
             }
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active && isConnected && agents.isEmpty {
-                if wsClient?.isConnected == true {
-                    Task { await loadHomeViaWS() }
-                } else {
-                    Task { await loadHome() }
-                }
+                Task { await loadHomeViaWS() }
             }
         }
         .sheet(isPresented: $isShowingComposer) {
@@ -250,11 +238,7 @@ struct ContentView: View {
                         .foregroundStyle(NexusStyle.text)
                     Spacer()
                     Button {
-                        if wsClient?.isConnected == true {
-                            Task { await loadHomeViaWS() }
-                        } else {
-                            Task { await loadHome() }
-                        }
+                        Task { await loadHomeViaWS() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 16, weight: .semibold))
@@ -338,11 +322,7 @@ struct ContentView: View {
         }
         .background(NexusStyle.background)
         .refreshable {
-            if wsClient?.isConnected == true {
-                await loadHomeViaWS()
-            } else {
-                await loadHome()
-            }
+            await loadHomeViaWS()
         }
         .sheet(isPresented: $isShowingAddServer) {
             addServerSheet
@@ -355,7 +335,7 @@ struct ContentView: View {
                 NexusStyle.background.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 16) {
                     desktopField(title: "SERVER NAME", text: $agentNameDraft, placeholder: "Local Hermes", systemImage: "server.rack")
-                    desktopField(title: "SERVER URL", text: $agentUrlDraft, placeholder: "http://100.x.y.z:8765", systemImage: "network")
+                    desktopField(title: "SERVER URL", text: $agentUrlDraft, placeholder: "https://your-server:8444", systemImage: "network")
                     Spacer()
                     Button {
                         Task {
@@ -1457,6 +1437,99 @@ struct ContentView: View {
         !followUpDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !deviceToken.isEmpty
     }
 
+    private func toolCallsView(_ calls: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(calls.split(separator: "\n").prefix(6), id: \.self) { call in
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(NexusStyle.subtleText)
+                        .frame(width: 4, height: 4)
+                    Text(String(call))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(NexusStyle.subtleText)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private func collapsedBubbleContent(_ item: TimelineItem, body: String, isUser: Bool) -> some View {
+        Group {
+            if body.isEmpty {
+                Text(timelineTitle(item))
+                    .font(.system(size: 14))
+                    .foregroundStyle(isUser ? .white : NexusStyle.text)
+            } else {
+                MarkdownText(text: String(body.prefix(200)) + "...", textColor: isUser ? .white : NexusStyle.text)
+            }
+            Button {
+                toggleCollapse(item.id)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("Show full message")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.blue)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func expandedBubbleContent(_ item: TimelineItem, body: String, isUser: Bool) -> some View {
+        Group {
+            if body.isEmpty {
+                Text(timelineTitle(item))
+                    .font(.system(size: 14))
+                    .foregroundStyle(isUser ? .white : NexusStyle.text)
+            } else {
+                MarkdownText(text: body, textColor: isUser ? .white : NexusStyle.text)
+            }
+        }
+    }
+
+    private func thinkingBubbleContent(_ item: TimelineItem, body: String) -> some View {
+        DisclosureGroup("Thinking") {
+            if !body.isEmpty {
+                MarkdownText(text: body, textColor: NexusStyle.subtleText)
+            }
+            if let calls = item.toolCalls, !calls.isEmpty {
+                toolCallsView(calls)
+            }
+        }
+        .font(.system(size: 11, weight: .medium, design: .monospaced))
+        .foregroundStyle(NexusStyle.subtleText)
+        .tint(NexusStyle.subtleText)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(NexusStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func collapseButton(_ item: TimelineItem, isUser: Bool) -> some View {
+        Button {
+            toggleCollapse(item.id)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 9, weight: .semibold))
+                Text("Collapse")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.blue)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toolCallsDisclosure(_ calls: String) -> some View {
+        DisclosureGroup("Tool calls (\(calls.count))") {
+            toolCallsView(calls)
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(NexusStyle.subtleText)
+        .tint(NexusStyle.subtleText)
+    }
+
     private func chatBubble(_ item: TimelineItem) -> some View {
         let isUser = item.type == "user_goal"
         let isThinking = item.type == "thinking_block"
@@ -1468,106 +1541,26 @@ struct ContentView: View {
             if isUser { Spacer(minLength: 52) }
 
             if isThinking {
-                DisclosureGroup("Thinking") {
-                    if !body.isEmpty {
-                        MarkdownText(text: body, textColor: NexusStyle.subtleText)
-                    }
-                    if let calls = item.toolCalls, !calls.isEmpty {
-                        VStack(alignment: .leading, spacing: 3) {
-                            ForEach(calls.prefix(6)) { call in
-                                HStack(spacing: 5) {
-                                    Circle()
-                                        .fill(call.status == "failed" ? .red : NexusStyle.subtleText)
-                                        .frame(width: 4, height: 4)
-                                    Text(call.summary)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(NexusStyle.subtleText)
-                                        .lineLimit(1)
-                                }
-                            }
-                        }
-                    }
-                }
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(NexusStyle.subtleText)
-                .tint(NexusStyle.subtleText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(NexusStyle.line.opacity(0.25), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                thinkingBubbleContent(item, body: body)
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     if shouldCollapse && !msgCollapsed(item.id) {
-                        if body.isEmpty {
-                            Text(timelineTitle(item))
-                                .font(.system(size: 14))
-                                .foregroundStyle(isUser ? .white : NexusStyle.text)
-                        } else {
-                            MarkdownText(text: String(body.prefix(200)) + "...", textColor: isUser ? .white : NexusStyle.text)
-                        }
-                        Button {
-                            toggleCollapse(item.id)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 9, weight: .semibold))
-                                Text("Show full message")
-                                    .font(.system(size: 12, weight: .medium))
-                            }
-                            .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.blue)
-                        }
-                        .buttonStyle(.plain)
+                        collapsedBubbleContent(item, body: body, isUser: isUser)
                     } else {
-                        if body.isEmpty {
-                            Text(timelineTitle(item))
-                                .font(.system(size: 14))
-                                .foregroundStyle(isUser ? .white : NexusStyle.text)
-                        } else {
-                            MarkdownText(text: body, textColor: isUser ? .white : NexusStyle.text)
-                        }
+                        expandedBubbleContent(item, body: body, isUser: isUser)
                         if shouldCollapse {
-                            Button {
-                                toggleCollapse(item.id)
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "chevron.up")
-                                        .font(.system(size: 9, weight: .semibold))
-                                    Text("Collapse")
-                                        .font(.system(size: 12, weight: .medium))
-                                }
-                                .foregroundStyle(isUser ? .white.opacity(0.7) : NexusStyle.blue)
-                            }
-                            .buttonStyle(.plain)
+                            collapseButton(item, isUser: isUser)
                         }
                     }
 
                     if let calls = item.toolCalls, !calls.isEmpty {
-                        DisclosureGroup("Tool calls (\(calls.count))") {
-                            VStack(alignment: .leading, spacing: 3) {
-                                ForEach(calls.prefix(8)) { call in
-                                    HStack(spacing: 5) {
-                                        Circle()
-                                            .fill(call.status == "failed" ? .red : (call.status == "running" ? NexusStyle.blue : NexusStyle.subtleText))
-                                            .frame(width: 4, height: 4)
-                                        Text(call.summary)
-                                            .font(.system(size: 10, design: .monospaced))
-                                            .foregroundStyle(call.status == "failed" ? .red : NexusStyle.muted)
-                                            .lineLimit(2)
-                                    }
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 3)
-                                    .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                }
-                            }
-                        }
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(NexusStyle.subtleText)
-                        .tint(NexusStyle.subtleText)
+                        toolCallsDisclosure(calls)
                     }
 
-                    if !item.createdAt.isEmpty {
+                    if !item.timestamp.isEmpty {
                         HStack(spacing: 4) {
                             Spacer()
-                            Text(formatTime(item.createdAt))
+                            Text(formatTime(item.timestamp))
                                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                                 .foregroundStyle(isUser ? .white.opacity(0.6) : NexusStyle.subtleText)
                         }
@@ -1741,10 +1734,10 @@ struct ContentView: View {
                 .foregroundStyle(NexusStyle.blue)
                 .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 2) {
-                Text(artifact.title)
+                Text(artifact.title ?? artifact.name)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(NexusStyle.text)
-                Text(artifact.summary)
+                Text(artifact.summary ?? artifact.type)
                     .font(.system(size: 12))
                     .foregroundStyle(NexusStyle.muted)
                     .lineLimit(2)
@@ -1762,10 +1755,10 @@ struct ContentView: View {
                     .foregroundStyle(NexusStyle.blue)
                     .frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(approval.title)
+                    Text(approval.title ?? approval.toolName)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(NexusStyle.text)
-                    Text(approval.summary)
+                    Text(approval.summary ?? approval.command)
                         .font(.system(size: 12))
                         .foregroundStyle(NexusStyle.muted)
                         .lineLimit(2)
@@ -1811,12 +1804,8 @@ struct ContentView: View {
     private func resolveApproval(id: String, approve: Bool) async {
         resolvingApprovalId = id
         do {
-            let client = makeClient()
-            if approve {
-                try await client.approveApproval(id: id, deviceToken: deviceToken)
-            } else {
-                try await client.denyApproval(id: id, deviceToken: deviceToken)
-            }
+            guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            _ = try await ws.call("approval.respond", params: ["session_id": id, "decision": approve ? "approve" : "deny"])
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             approvalList.removeAll { $0.id == id }
             toast = ToastMessage(text: approve ? "Approved" : "Denied", kind: .success)
@@ -2070,55 +2059,6 @@ struct ContentView: View {
         isLoadingPersistentAgents = false
     }
 
-    private func loadHome() async {
-        isLoadingAgents = true
-        isLoadingSessions = true
-        isLoadingPersistentAgents = true
-        isLoadingCron = true
-        isLoadingApprovals = true
-        isLoadingArtifacts = true
-        do {
-            try await fetchAllData()
-        } catch MobileGatewayError.badStatus(401) {
-            statusMessage = "Reconnecting..."
-            await reconnect()
-            isLoadingAgents = false
-            isLoadingSessions = false
-            isLoadingPersistentAgents = false
-            isLoadingCron = false
-            isLoadingApprovals = false
-            isLoadingArtifacts = false
-            return
-        } catch {
-            statusMessage = error.localizedDescription
-        }
-        isLoadingAgents = false
-        isLoadingSessions = false
-        isLoadingPersistentAgents = false
-        isLoadingCron = false
-        isLoadingApprovals = false
-        isLoadingArtifacts = false
-    }
-
-    private func fetchAllData() async throws {
-        let client = makeClient()
-        async let statusResult = client.status()
-        async let agentsResult = client.agents(deviceToken: deviceToken)
-        async let sessionsResult = client.sessions(deviceToken: deviceToken)
-        async let persistentResult = client.persistentAgents(deviceToken: deviceToken)
-        async let cronResult = client.cronJobs(deviceToken: deviceToken)
-        async let approvalsResult = client.approvals(deviceToken: deviceToken)
-        async let artifactsResult = client.artifacts(deviceToken: deviceToken)
-        nodeName = try await statusResult.nodeName
-        agents = try await agentsResult
-        sessions = try await sessionsResult
-        persistentAgents = try await persistentResult
-        cronJobs = try await cronResult
-        approvalList = try await approvalsResult
-        artifactList = try await artifactsResult
-        cacheToDisk()
-    }
-
     private func cacheToDisk() {
         let cache: [String: Any] = [
             "nodeName": nodeName,
@@ -2132,78 +2072,34 @@ struct ContentView: View {
         if let name = cache["nodeName"] as? String { nodeName = name }
     }
 
-    private func reconnect() async {
-        let oldDeviceId = deviceId
-        let oldToken = deviceToken
-        do {
-            let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
-            let pairing = try await client.startPairing()
-            let completed = try await client.completePairing(code: pairing.code, deviceName: deviceName.isEmpty ? UIDevice.current.name : deviceName, platform: "ios")
-            if !oldDeviceId.isEmpty {
-                _ = try? await client.revokeDevice(id: oldDeviceId, deviceToken: oldToken)
-            }
-            deviceId = completed.deviceId
-            deviceToken = completed.deviceToken
-            KeychainHelper.save(completed.deviceId, key: "device_id")
-            KeychainHelper.save(completed.deviceToken, key: "device_token")
-            try await fetchAllData()
-            statusMessage = "Reconnected to \(nodeName)"
-        } catch {
-            statusMessage = error.localizedDescription
-        }
-    }
-
     private func createAgent() async {
-        let name = newAgentName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        isLoadingPersistentAgents = true
-        do {
-            let client = makeClient()
-            let agent = try await client.createPersistentAgent(name: name, description: newAgentDesc, deviceToken: deviceToken)
-            persistentAgents.insert(agent, at: 0)
-            newAgentName = ""
-            newAgentDesc = ""
-            toast = ToastMessage(text: "Created \(agent.name)", kind: .success)
-        } catch {
-            toast = ToastMessage(text: error.localizedDescription, kind: .error)
-        }
-        isLoadingPersistentAgents = false
+        // No-op: agent creation not available via WebSocket RPC
     }
 
     private func deleteAgent(_ agent: PersistentAgent) async {
-        do {
-            let client = makeClient()
-            try await client.deletePersistentAgent(id: agent.id, deviceToken: deviceToken)
-            persistentAgents.removeAll { $0.id == agent.id }
-            toast = ToastMessage(text: "Deleted \(agent.name)", kind: .success)
-        } catch {
-            toast = ToastMessage(text: error.localizedDescription, kind: .error)
-        }
+        // No-op: agent deletion not available via WebSocket RPC
     }
 
     private func updatePersistentAgent() async {
-        let name = editAgentName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        isLoadingPersistentAgents = true
-        do {
-            let client = makeClient()
-            let updated = try await client.updatePersistentAgent(id: editAgentId, name: name, description: editAgentDesc, icon: editAgentIcon, deviceToken: deviceToken)
-            if let idx = persistentAgents.firstIndex(where: { $0.id == editAgentId }) {
-                persistentAgents[idx] = updated
-            }
-            isShowingEditAgent = false
-            toast = ToastMessage(text: "Updated \(updated.name)", kind: .success)
-        } catch {
-            toast = ToastMessage(text: error.localizedDescription, kind: .error)
-        }
-        isLoadingPersistentAgents = false
+        // No-op: agent update not available via WebSocket RPC
     }
 
     private func loadAgentMessages(_ agent: PersistentAgent) async {
         isLoadingAgentMessages = true
         do {
-            let client = makeClient()
-            agentMessages = try await client.agentMessages(agentId: agent.id, deviceToken: deviceToken)
+            guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            let result = try await ws.call("session.history", params: ["session_id": agent.id])
+            if let resultDict = result as? [String: Any], let msgsArray = resultDict["messages"] as? [[String: Any]] {
+                agentMessages = msgsArray.compactMap { dict in
+                    PersistentAgentMessage(
+                        id: dict["id"] as? String ?? UUID().uuidString,
+                        agentId: agent.id,
+                        role: dict["role"] as? String ?? "user",
+                        content: dict["content"] as? String ?? dict["text"] as? String ?? "",
+                        createdAt: dict["timestamp"] as? String ?? ""
+                    )
+                }
+            }
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -2228,14 +2124,10 @@ struct ContentView: View {
         agentMessages.append(localUserMsg)
 
         do {
-            let client = makeClient()
-            let response = try await client.sendAgentMessage(agentId: agent.id, content: text, deviceToken: deviceToken)
-            if let idx = agentMessages.firstIndex(where: { $0.id == localUserMsg.id }) {
-                agentMessages[idx] = response.userMessage
-            } else {
-                agentMessages.append(response.userMessage)
-            }
-            agentMessages.append(response.assistantMessage)
+            guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            _ = try await ws.call("prompt.submit", params: ["session_id": agent.id, "text": text])
+            // Reload messages to get the assistant response
+            await loadAgentMessages(agent)
         } catch {
             agentInputDraft = text
             agentMessages.removeAll { $0.id == localUserMsg.id }
@@ -2249,16 +2141,21 @@ struct ContentView: View {
         let url = normalized(agentUrlDraft)
         guard !name.isEmpty, !url.isEmpty else { return }
         isAddingAgent = true
-        do {
-            let client = makeClient()
-            let agent = try await client.addAgent(name: name, baseURL: url, deviceToken: deviceToken)
-            agents.append(agent)
-            agentNameDraft = ""
-            agentUrlDraft = ""
-            statusMessage = "Added \(agent.name)"
-        } catch {
-            statusMessage = error.localizedDescription
-        }
+        // Add server locally — no WebSocket RPC for adding remote agent servers
+        let server = AgentInfo(
+            id: UUID().uuidString,
+            name: name,
+            baseUrl: url,
+            status: "offline",
+            profile: "default",
+            model: "default",
+            createdAt: String(Int(Date().timeIntervalSince1970)),
+            lastSeenAt: nil
+        )
+        agents.append(server)
+        agentNameDraft = ""
+        agentUrlDraft = ""
+        statusMessage = "Added \(name)"
         isAddingAgent = false
     }
 
@@ -2268,31 +2165,31 @@ struct ContentView: View {
         let url = editServerUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
         isAddingAgent = true
-        do {
-            let client = makeClient()
-            let updated = try await client.updateAgent(id: server.id, name: name, baseURL: url, deviceToken: deviceToken)
-            if let idx = agents.firstIndex(where: { $0.id == server.id }) {
-                agents[idx] = updated
-            }
-            selectedAgentServer = updated
-            isShowingEditServer = false
-            statusMessage = "Updated \(updated.name)"
-        } catch {
-            statusMessage = error.localizedDescription
+        // Update server locally — no WebSocket RPC for updating remote agent servers
+        let updated = AgentInfo(
+            id: server.id,
+            name: name,
+            baseUrl: url.isEmpty ? server.baseUrl : url,
+            status: server.status,
+            profile: server.profile,
+            model: server.model,
+            createdAt: server.createdAt,
+            lastSeenAt: server.lastSeenAt
+        )
+        if let idx = agents.firstIndex(where: { $0.id == server.id }) {
+            agents[idx] = updated
         }
+        selectedAgentServer = updated
+        isShowingEditServer = false
+        statusMessage = "Updated \(name)"
         isAddingAgent = false
     }
 
     private func removeAgent(_ agent: AgentInfo) async {
         removingAgentId = agent.id
-        do {
-            let client = makeClient()
-            try await client.removeAgent(id: agent.id, deviceToken: deviceToken)
-            agents.removeAll { $0.id == agent.id }
-            statusMessage = "Removed \(agent.name)"
-        } catch {
-            statusMessage = error.localizedDescription
-        }
+        // Remove server locally — no WebSocket RPC for removing remote agent servers
+        agents.removeAll { $0.id == agent.id }
+        statusMessage = "Removed \(agent.name)"
         removingAgentId = nil
     }
 
@@ -2301,12 +2198,12 @@ struct ContentView: View {
         guard !goal.isEmpty else { return }
         isCreatingSession = true
         do {
-            let client = makeClient()
-            let response = try await client.createSession(goal: goal, deviceToken: deviceToken)
-            sessions.removeAll { $0.id == response.session.id }
-            sessions.insert(response.session, at: 0)
+            guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            _ = try await ws.call("session.create", params: [:])
+            _ = try await ws.call("prompt.submit", params: ["session_id": "new", "text": goal])
+            await loadHomeViaWS()
             selectedSection = "Sessions"
-            toast = ToastMessage(text: "Started \(response.session.title)", kind: .success)
+            toast = ToastMessage(text: "Session started", kind: .success)
             isShowingComposer = false
             goalDraft = ""
         } catch {
@@ -2319,8 +2216,22 @@ struct ContentView: View {
         isLoadingTimeline = true
         timelineError = ""
         do {
-            let client = makeClient()
-            selectedTimeline = try await client.timeline(sessionId: session.id, deviceToken: deviceToken)
+            guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            let result = try await ws.call("session.history", params: ["session_id": session.id])
+            if let resultDict = result as? [String: Any], let msgsArray = resultDict["messages"] as? [[String: Any]] {
+                let items = msgsArray.compactMap { dict -> TimelineItem? in
+                    let id = dict["id"] as? String ?? UUID().uuidString
+                    let type = dict["type"] as? String ?? "message"
+                    let text = dict["content"] as? String ?? dict["text"] as? String
+                    let timestamp = dict["timestamp"] as? String ?? ""
+                    let toolName = dict["tool_name"] as? String
+                    let toolCalls = dict["tool_calls"] as? String
+                    return TimelineItem(id: id, type: type, text: text, markdown: nil, title: nil, timestamp: timestamp, toolName: toolName, toolCalls: toolCalls)
+                }
+                selectedTimeline = SessionTimeline(items: items)
+            } else {
+                selectedTimeline = SessionTimeline(items: [])
+            }
         } catch {
             selectedTimeline = nil
             timelineError = error.localizedDescription
@@ -2334,25 +2245,15 @@ struct ContentView: View {
         isAppendingGoal = true
         timelineError = ""
         do {
-            let client = makeClient()
-            let response = try await client.appendGoal(sessionId: session.id, text: text, deviceToken: deviceToken)
-            selectedTimeline = response.timeline
-            sessions.removeAll { $0.id == response.session.id }
-            sessions.insert(response.session, at: 0)
+            guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            _ = try await ws.call("prompt.submit", params: ["session_id": session.id, "text": text])
+            await loadTimeline(for: session)
             followUpDraft = ""
         } catch {
             timelineError = error.localizedDescription
             toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
         isAppendingGoal = false
-    }
-
-    private func makeClient() -> MobileGatewayClient {
-        let client = MobileGatewayClient(baseURL: gatewayBaseUrl)
-        client.onUnauthorized = {
-            await self.reconnect()
-        }
-        return client
     }
 
     private func normalized(_ value: String) -> String {

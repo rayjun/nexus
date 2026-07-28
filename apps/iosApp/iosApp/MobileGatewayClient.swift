@@ -1,43 +1,6 @@
 import Foundation
 
-final class InsecureURLSessionDelegate: NSObject, URLSessionDelegate {
-    func urlSession(_ session: URLSession,
-                    didReceive challenge: URLAuthenticationChallenge,
-                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
-            if let trust = challenge.protectionSpace.serverTrust {
-                completionHandler(.useCredential, URLCredential(trust: trust))
-                return
-            }
-        }
-        completionHandler(.performDefaultHandling, nil)
-    }
-}
-
-struct MobileStatus: Decodable {
-    let nodeId: String
-    let nodeName: String
-    let status: String
-    let gatewayReady: Bool
-    let hermesVersion: String
-    let apiVersion: String
-    let profile: String
-    let model: [String: String]
-    let features: [String: Bool]
-}
-
-struct PairingStart: Decodable {
-    let pairingId: String
-    let code: String
-    let expiresAt: String
-    let qrPayload: String
-}
-
-struct PairingComplete: Decodable {
-    let deviceId: String
-    let deviceToken: String
-    let capabilities: [String: Bool]
-}
+// MARK: - Data Models (used by ContentView UI)
 
 struct AgentInfo: Decodable, Identifiable {
     let id: String
@@ -50,10 +13,6 @@ struct AgentInfo: Decodable, Identifiable {
     let lastSeenAt: String?
 }
 
-struct AgentsResponse: Decodable {
-    let agents: [AgentInfo]
-}
-
 struct SessionSummary: Decodable, Identifiable, Hashable {
     let id: String
     let title: String
@@ -62,38 +21,19 @@ struct SessionSummary: Decodable, Identifiable, Hashable {
     let updatedAt: String
 }
 
-struct SessionsResponse: Decodable {
-    let sessions: [SessionSummary]
-}
-
 struct SessionTimeline: Decodable {
-    let sessionId: String
-    let title: String
     let items: [TimelineItem]
 }
 
-struct TimelineItem: Decodable, Identifiable {
+struct TimelineItem: Decodable, Identifiable, Hashable {
+    let id: String
     let type: String
-    let id: String
-    let createdAt: String
     let text: String?
-    let title: String?
     let markdown: String?
-    let toolCalls: [ToolCall]?
-}
-
-struct ToolCall: Decodable, Identifiable {
-    let id: String
-    let name: String
-    let summary: String
-    let status: String
-    let durationMs: Int?
-    let error: String?
-}
-
-struct GoalResponse: Decodable {
-    let session: SessionSummary
-    let timeline: SessionTimeline
+    let title: String?
+    let timestamp: String
+    let toolName: String?
+    let toolCalls: String?
 }
 
 struct PersistentAgent: Decodable, Identifiable, Hashable {
@@ -108,325 +48,12 @@ struct PersistentAgent: Decodable, Identifiable, Hashable {
     let lastMessageAt: String?
 }
 
-struct PersistentAgentsResponse: Decodable {
-    let agents: [PersistentAgent]
-}
-
 struct PersistentAgentMessage: Decodable, Identifiable {
     let id: String
     let agentId: String
     let role: String
     let content: String
     let createdAt: String
-}
-
-struct AgentMessagesResponse: Decodable {
-    let messages: [PersistentAgentMessage]
-}
-
-struct AgentMessageResponse: Decodable {
-    let userMessage: PersistentAgentMessage
-    let assistantMessage: PersistentAgentMessage
-}
-
-enum MobileGatewayError: Error, LocalizedError {
-    case invalidURL
-    case badStatus(Int)
-    case emptyToken
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "Gateway address is invalid. Please check the URL in Settings."
-        case .badStatus(let code):
-            switch code {
-            case 401: return "Session expired. Reconnecting…"
-            case 403: return "Access denied. Your device may not be authorized."
-            case 404: return "The requested resource was not found."
-            case 429: return "Too many attempts. Please wait a moment and try again."
-            case 500...599: return "Gateway is temporarily unavailable. Please try again."
-            default: return "Gateway returned an error (HTTP \(code)). Please try again."
-            }
-        case .emptyToken:
-            return "Not connected to a gateway. Please reconnect."
-        }
-    }
-}
-
-final class MobileGatewayClient {
-    private let baseURL: URL
-    private let session: URLSession
-    private let decoder: JSONDecoder
-    private let encoder: JSONEncoder
-    var onUnauthorized: (() async -> Void)?
-
-    init(baseURL: String, session: URLSession? = nil) {
-        var normalized = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        while normalized.hasSuffix("/") {
-            normalized.removeLast()
-        }
-        self.baseURL = URL(string: normalized) ?? URL(string: "http://127.0.0.1:8765")!
-        if let session {
-            self.session = session
-        } else {
-            let config = URLSessionConfiguration.default
-            config.timeoutIntervalForRequest = 10
-            let delegate = InsecureURLSessionDelegate()
-            self.session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
-        }
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-    }
-
-    func status() async throws -> MobileStatus {
-        try await get("/mobile/v1/status")
-    }
-
-    func startPairing() async throws -> PairingStart {
-        try await post("/mobile/v1/pair/start", body: EmptyBody())
-    }
-
-    func completePairing(code: String, deviceName: String, platform: String) async throws -> PairingComplete {
-        try await post("/mobile/v1/pair/complete", body: PairingCompleteBody(code: code, deviceName: deviceName, platform: platform))
-    }
-
-    func sessions(deviceToken: String) async throws -> [SessionSummary] {
-        if deviceToken.isEmpty {
-            throw MobileGatewayError.emptyToken
-        }
-        let response: SessionsResponse = try await get("/mobile/v1/sessions", token: deviceToken)
-        return response.sessions
-    }
-
-    func agents(deviceToken: String) async throws -> [AgentInfo] {
-        if deviceToken.isEmpty {
-            throw MobileGatewayError.emptyToken
-        }
-        let response: AgentsResponse = try await get("/mobile/v1/agents", token: deviceToken)
-        return response.agents
-    }
-
-    func addAgent(name: String, baseURL: String, deviceToken: String) async throws -> AgentInfo {
-        if deviceToken.isEmpty {
-            throw MobileGatewayError.emptyToken
-        }
-        return try await post("/mobile/v1/agents", body: AgentBody(name: name, baseUrl: baseURL), token: deviceToken)
-    }
-
-    func removeAgent(id: String, deviceToken: String) async throws {
-        if deviceToken.isEmpty {
-            throw MobileGatewayError.emptyToken
-        }
-        var request = try request(path: "/mobile/v1/agents/\(id)", method: "DELETE")
-        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
-        try await sendEmpty(request)
-    }
-
-    func revokeDevice(id: String, deviceToken: String) async throws {
-        if deviceToken.isEmpty {
-            throw MobileGatewayError.emptyToken
-        }
-        var request = try request(path: "/mobile/v1/devices/\(id)", method: "DELETE")
-        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
-        try await sendEmpty(request)
-    }
-
-    func updateAgent(id: String, name: String, baseURL: String, deviceToken: String) async throws -> AgentInfo {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        return try await post("/mobile/v1/agents/\(id)", body: AgentBody(name: name, baseUrl: baseURL), token: deviceToken)
-    }
-
-    func createSession(goal: String, deviceToken: String) async throws -> GoalResponse {
-        if deviceToken.isEmpty {
-            throw MobileGatewayError.emptyToken
-        }
-        return try await post("/mobile/v1/sessions", body: GoalBody(goal: goal), token: deviceToken, timeout: 180)
-    }
-
-    func timeline(sessionId: String, deviceToken: String) async throws -> SessionTimeline {
-        if deviceToken.isEmpty {
-            throw MobileGatewayError.emptyToken
-        }
-        return try await get("/mobile/v1/sessions/\(sessionId)/timeline", token: deviceToken)
-    }
-
-    func appendGoal(sessionId: String, text: String, deviceToken: String) async throws -> GoalResponse {
-        if deviceToken.isEmpty {
-            throw MobileGatewayError.emptyToken
-        }
-        return try await post("/mobile/v1/sessions/\(sessionId)/goals", body: GoalBody(goal: text), token: deviceToken, timeout: 180)
-    }
-
-    func persistentAgents(deviceToken: String) async throws -> [PersistentAgent] {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        let response: PersistentAgentsResponse = try await get("/mobile/v1/agents/persistent", token: deviceToken)
-        return response.agents
-    }
-
-    func createPersistentAgent(name: String, description: String, deviceToken: String) async throws -> PersistentAgent {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        return try await post("/mobile/v1/agents/persistent", body: AgentCreateBody(name: name, description: description), token: deviceToken)
-    }
-
-    func updatePersistentAgent(id: String, name: String?, description: String?, icon: String?, deviceToken: String) async throws -> PersistentAgent {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        return try await put("/mobile/v1/agents/persistent/\(id)", body: AgentUpdateBody(name: name, description: description, icon: icon), token: deviceToken)
-    }
-
-    func deletePersistentAgent(id: String, deviceToken: String) async throws {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        var request = try request(path: "/mobile/v1/agents/persistent/\(id)", method: "DELETE")
-        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
-        try await sendEmpty(request)
-    }
-
-    func agentMessages(agentId: String, deviceToken: String, limit: Int = 50, offset: Int = 0) async throws -> [PersistentAgentMessage] {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        let response: AgentMessagesResponse = try await get("/mobile/v1/agents/persistent/\(agentId)/messages?limit=\(limit)&offset=\(offset)", token: deviceToken)
-        return response.messages
-    }
-
-    func sendAgentMessage(agentId: String, content: String, deviceToken: String) async throws -> AgentMessageResponse {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        return try await post("/mobile/v1/agents/persistent/\(agentId)/messages", body: AgentMessageBody(content: content), token: deviceToken, timeout: 180)
-    }
-
-    func cronJobs(deviceToken: String) async throws -> [CronJobInfo] {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        let response: CronJobsResponse = try await get("/mobile/v1/cron/jobs", token: deviceToken)
-        return response.jobs
-    }
-
-    func approvals(deviceToken: String) async throws -> [ApprovalInfo] {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        let response: ApprovalsResponse = try await get("/mobile/v1/approvals", token: deviceToken)
-        return response.approvals
-    }
-
-    func approveApproval(id: String, deviceToken: String) async throws {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        var request = try request(path: "/mobile/v1/approvals/\(id)/approve", method: "POST", timeout: 30)
-        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
-        try await sendEmpty(request)
-    }
-
-    func denyApproval(id: String, deviceToken: String) async throws {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        var request = try request(path: "/mobile/v1/approvals/\(id)/deny", method: "POST", timeout: 30)
-        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
-        try await sendEmpty(request)
-    }
-
-    func artifacts(deviceToken: String) async throws -> [ArtifactInfo] {
-        if deviceToken.isEmpty { throw MobileGatewayError.emptyToken }
-        let response: ArtifactsResponse = try await get("/mobile/v1/artifacts", token: deviceToken)
-        return response.artifacts
-    }
-
-    private func get<T: Decodable>(_ path: String, token: String? = nil) async throws -> T {
-        var request = try request(path: path, method: "GET")
-        if let token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        do {
-            return try await send(request)
-        } catch MobileGatewayError.badStatus(401) {
-            guard let onUnauthorized else { throw MobileGatewayError.badStatus(401) }
-            await onUnauthorized()
-            throw MobileGatewayError.badStatus(401)
-        }
-    }
-
-    private func post<T: Decodable, Body: Encodable>(_ path: String, body: Body, token: String? = nil, timeout: TimeInterval = 10) async throws -> T {
-        var request = try request(path: path, method: "POST", timeout: timeout)
-        if let token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(body)
-        do {
-            return try await send(request)
-        } catch MobileGatewayError.badStatus(401) {
-            guard let onUnauthorized else { throw MobileGatewayError.badStatus(401) }
-            await onUnauthorized()
-            throw MobileGatewayError.badStatus(401)
-        }
-    }
-
-    private func put<T: Decodable, Body: Encodable>(_ path: String, body: Body, token: String? = nil, timeout: TimeInterval = 10) async throws -> T {
-        var request = try request(path: path, method: "PUT", timeout: timeout)
-        if let token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(body)
-        return try await send(request)
-    }
-
-    private func request(path: String, method: String, timeout: TimeInterval = 10) throws -> URLRequest {
-        guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
-            throw MobileGatewayError.invalidURL
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.timeoutInterval = timeout
-        return request
-    }
-
-    private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
-        let (data, response) = try await session.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(code) else {
-            throw MobileGatewayError.badStatus(code)
-        }
-        do {
-            return try decoder.decode(T.self, from: data)
-        } catch {
-            throw MobileGatewayError.invalidURL
-        }
-    }
-
-    private func sendEmpty(_ request: URLRequest) async throws {
-        let (data, response) = try await session.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(code) else {
-            throw MobileGatewayError.badStatus(code)
-        }
-    }
-}
-
-private struct EmptyBody: Encodable {}
-
-private struct PairingCompleteBody: Encodable {
-    let code: String
-    let deviceName: String
-    let platform: String
-}
-
-private struct GoalBody: Encodable {
-    let goal: String
-}
-
-private struct AgentBody: Encodable {
-    let name: String
-    let baseUrl: String
-}
-
-private struct AgentCreateBody: Encodable {
-    let name: String
-    let description: String
-}
-
-private struct AgentUpdateBody: Encodable {
-    let name: String?
-    let description: String?
-    let icon: String?
-}
-
-private struct AgentMessageBody: Encodable {
-    let content: String
 }
 
 struct CronJobInfo: Decodable, Identifiable {
@@ -444,31 +71,22 @@ struct CronRunInfo: Decodable {
     let finishedAt: String?
 }
 
-struct CronJobsResponse: Decodable {
-    let jobs: [CronJobInfo]
-}
-
 struct ApprovalInfo: Decodable, Identifiable {
     let id: String
-    let title: String
+    let toolName: String
+    let command: String
+    let title: String?
+    let summary: String?
     let status: String
-    let risk: String
-    let summary: String
     let createdAt: String
-}
-
-struct ApprovalsResponse: Decodable {
-    let approvals: [ApprovalInfo]
 }
 
 struct ArtifactInfo: Decodable, Identifiable {
     let id: String
-    let title: String
-    let kind: String
-    let summary: String
+    let sessionId: String
+    let name: String
+    let title: String?
+    let summary: String?
+    let type: String
     let createdAt: String
-}
-
-struct ArtifactsResponse: Decodable {
-    let artifacts: [ArtifactInfo]
 }
