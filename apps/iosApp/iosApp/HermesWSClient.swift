@@ -142,7 +142,7 @@ final class HermesWSClient: NSObject, ObservableObject {
     }
 }
 
-extension HermesWSClient: URLSessionWebSocketDelegate {
+extension HermesWSClient: URLSessionWebSocketDelegate, URLSessionDelegate {
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
         os_log("delegate: WS opened", log: wsLog, type: .info)
         // Start receiving messages via delegate
@@ -152,6 +152,21 @@ extension HermesWSClient: URLSessionWebSocketDelegate {
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         os_log("delegate: WS closed code=%d", log: wsLog, type: .error, Int(closeCode.rawValue))
         DispatchQueue.main.async { self.isConnected = false }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let trust = challenge.protectionSpace.serverTrust
+        else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+        os_log("delegate: accepting self-signed cert for %{public}@", log: wsLog, type: .info, challenge.protectionSpace.host)
+        completionHandler(.useCredential, URLCredential(trust: trust))
     }
 
     private func receiveNext() {

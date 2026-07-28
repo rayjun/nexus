@@ -183,7 +183,7 @@ The app automatically:
 2. Appends `/api/ws?token=YOUR_TOKEN`
 3. Nginx/Caddy terminates TLS and proxies to `ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN`
 4. Dashboard validates the token (loopback mode) and accepts the connection
-5. The app accepts self-signed certificates via `InsecureURLSessionDelegate`
+5. The app trusts self-signed certificates via `URLSessionDelegate` serverTrust challenge handling
 
 ### Authentication How It Works
 
