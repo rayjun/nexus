@@ -93,7 +93,7 @@ struct ContentView: View {
             gatewayInput = gatewayBaseUrl
             #if DEBUG
             if gatewayInput.isEmpty {
-                gatewayInput = "https://100.91.132.51:8444"
+                gatewayInput = "https://erc8004list.xyz"
             }
             if apiKeyInput.isEmpty {
                 apiKeyInput = "c3b6ebfb53e7beae5492e40320f30cf1"
