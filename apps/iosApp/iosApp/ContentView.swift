@@ -21,6 +21,7 @@ struct ContentView: View {
     @State private var isCreatingSession = false
     @State private var selectedSession: SessionSummary?
     @State private var selectedTimeline: SessionTimeline?
+    @State private var resumedSessionIds: [String: String] = [:]
     @State private var isLoadingTimeline = false
     @State private var timelineError = ""
     @State private var followUpDraft = ""
@@ -656,7 +657,6 @@ struct ContentView: View {
         Button {
             selectedPersistentAgent = agent
             agentMessages = []
-            Task { await loadAgentMessages(agent) }
         } label: {
             HStack(spacing: 12) {
                 ZStack {
@@ -1052,6 +1052,9 @@ struct ContentView: View {
                 agentInputBar(agent)
             }
         }
+        .task(id: agent.id) {
+            await loadAgentMessages(agent)
+        }
         .navigationTitle(isSendingAgentMessage ? "typing…" : agent.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -1164,35 +1167,6 @@ struct ContentView: View {
         f.dateFormat = "HH:mm"
         return f
     }()
-
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
-    private static let isoFormatterNoFraction: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
-
-    private static let relativeDateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        return f
-    }()
-
-    private func relativeTime(_ iso: String) -> String {
-        let date = Self.isoFormatter.date(from: iso) ?? Self.isoFormatterNoFraction.date(from: iso)
-        guard let date else { return "" }
-        let interval = Date().timeIntervalSince(date)
-        if interval < 60 { return "just now" }
-        if interval < 3600 { return "\(Int(interval / 60))m ago" }
-        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
-        if interval < 604800 { return "\(Int(interval / 86400))d ago" }
-        return Self.relativeDateFormatter.string(from: date)
-    }
 
     private func agentInputBar(_ agent: PersistentAgent) -> some View {
         HStack(spacing: 10) {
@@ -1680,24 +1654,20 @@ struct ContentView: View {
             Circle()
                 .fill(session.status == "running" ? NexusStyle.blue : NexusStyle.subtleText)
                 .frame(width: 7, height: 7)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(session.title)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(NexusStyle.text)
                     .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(session.status.capitalized)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(session.status == "running" ? NexusStyle.blue : NexusStyle.muted)
-                    if !session.updatedAt.isEmpty {
-                        Text("·")
-                            .font(.system(size: 11))
-                            .foregroundStyle(NexusStyle.subtleText)
-                        Text(relativeTime(session.updatedAt))
-                            .font(.system(size: 11))
-                            .foregroundStyle(NexusStyle.muted)
-                    }
+                if !session.preview.isEmpty {
+                    Text(session.preview)
+                        .font(.system(size: 12))
+                        .foregroundStyle(NexusStyle.muted)
+                        .lineLimit(2)
                 }
+                Text("\(session.messageCount) messages")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(NexusStyle.muted)
             }
             Spacer()
             Image(systemName: "chevron.right")
@@ -1982,11 +1952,19 @@ struct ContentView: View {
                 newSessions = sessionsArray.compactMap { dict in
                     let id = dict["id"] as? String ?? ""
                     let title = dict["title"] as? String ?? "Untitled"
+                    let preview = dict["preview"] as? String ?? ""
+                    let messageCount = dict["message_count"] as? Int ?? 0
                     let startedAt = dict["started_at"] as? Double ?? 0
-                    let endedAt = dict["ended_at"] as? Double
-                    let status = endedAt == nil ? "active" : "completed"
-                    let dateStr = String(format: "%.0f", startedAt)
-                    return SessionSummary(id: id, title: title, status: status, createdAt: dateStr, updatedAt: dateStr)
+                    let dateStr = String(format: "%.3f", startedAt)
+                    return SessionSummary(
+                        id: id,
+                        title: title,
+                        preview: preview,
+                        messageCount: messageCount,
+                        status: "recent",
+                        createdAt: dateStr,
+                        updatedAt: dateStr
+                    )
                 }
             }
 
@@ -2018,13 +1996,13 @@ struct ContentView: View {
                 return PersistentAgent(
                     id: s.id,
                     name: s.title,
-                    description: s.status,
+                    description: s.preview.isEmpty ? "Latest conversation" : s.preview,
                     icon: "cpu",
                     capabilities: [],
-                    linkedSessionIds: [],
+                    linkedSessionIds: [s.id],
                     createdAt: s.createdAt,
                     updatedAt: s.updatedAt,
-                    lastMessageAt: nil
+                    lastMessageAt: s.updatedAt
                 )
             }
 
@@ -2035,7 +2013,7 @@ struct ContentView: View {
                 self.persistentAgents = newPersistentAgents
                 self.approvalList = []
 
-                if var server = agents.first, !newSessions.isEmpty {
+                if let server = agents.first, !newSessions.isEmpty {
                     let updated = AgentInfo(
                         id: server.id,
                         name: server.name,
@@ -2091,33 +2069,56 @@ struct ContentView: View {
         // No-op: agent update not available via WebSocket RPC
     }
 
+    private func sessionMessages(for sourceSessionId: String) async throws -> (activeSessionId: String, messages: [[String: Any]]) {
+        guard let ws = wsClient else {
+            throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"])
+        }
+
+        if let activeSessionId = await MainActor.run(body: { resumedSessionIds[sourceSessionId] }) {
+            do {
+                let result = try await ws.call("session.history", params: ["session_id": activeSessionId])
+                if let resultDict = result as? [String: Any], let messages = resultDict["messages"] as? [[String: Any]] {
+                    return (activeSessionId, messages)
+                }
+            } catch {
+                await MainActor.run { _ = resumedSessionIds.removeValue(forKey: sourceSessionId) }
+            }
+        }
+
+        let result = try await ws.call("session.resume", params: ["session_id": sourceSessionId, "cols": 80])
+        guard let resultDict = result as? [String: Any] else {
+            throw NSError(domain: "Nexus", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid session response"])
+        }
+        guard let activeSessionId = resultDict["session_id"] as? String, !activeSessionId.isEmpty else {
+            throw NSError(domain: "Nexus", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing active session ID"])
+        }
+        guard let messages = resultDict["messages"] as? [[String: Any]] else {
+            throw NSError(domain: "Nexus", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid session messages"])
+        }
+        await MainActor.run { resumedSessionIds[sourceSessionId] = activeSessionId }
+        return (activeSessionId, messages)
+    }
+
     private func loadAgentMessages(_ agent: PersistentAgent) async {
         isLoadingAgentMessages = true
         do {
-            guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
-            let result = try await ws.call("session.resume", params: ["session_id": agent.id, "cols": 80])
-            if let resultDict = result as? [String: Any], let msgsArray = resultDict["messages"] as? [[String: Any]] {
-                let msgs = msgsArray.compactMap { dict -> PersistentAgentMessage? in
-                    let role = dict["role"] as? String ?? "user"
-                    let text = dict["text"] as? String ?? dict["content"] as? String ?? ""
-                    guard !text.isEmpty || role == "tool" else { return nil }
-                    return PersistentAgentMessage(
-                        id: UUID().uuidString,
-                        agentId: agent.id,
-                        role: role,
-                        content: text.isEmpty ? (dict["name"] as? String ?? "") + ": " + (dict["context"] as? String ?? "") : text,
-                        createdAt: ""
-                    )
-                }
-                await MainActor.run {
-                    self.agentMessages = msgs
-                    self.isLoadingAgentMessages = false
-                }
-            } else {
-                await MainActor.run {
-                    self.agentMessages = []
-                    self.isLoadingAgentMessages = false
-                }
+            let session = try await sessionMessages(for: agent.id)
+            let recentMessages = Array(session.messages.suffix(200))
+            let msgs = recentMessages.compactMap { dict -> PersistentAgentMessage? in
+                let role = dict["role"] as? String ?? "user"
+                let text = dict["text"] as? String ?? dict["content"] as? String ?? ""
+                guard !text.isEmpty || role == "tool" else { return nil }
+                return PersistentAgentMessage(
+                    id: UUID().uuidString,
+                    agentId: agent.id,
+                    role: role,
+                    content: text.isEmpty ? (dict["name"] as? String ?? "") + ": " + (dict["context"] as? String ?? "") : text,
+                    createdAt: ""
+                )
+            }
+            await MainActor.run {
+                self.agentMessages = msgs
+                self.isLoadingAgentMessages = false
             }
         } catch {
             await MainActor.run {
@@ -2146,8 +2147,8 @@ struct ContentView: View {
 
         do {
             guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
-            _ = try await ws.call("prompt.submit", params: ["session_id": agent.id, "text": text])
-            // Reload messages to get the assistant response
+            let session = try await sessionMessages(for: agent.id)
+            _ = try await ws.call("prompt.submit", params: ["session_id": session.activeSessionId, "text": text])
             await loadAgentMessages(agent)
         } catch {
             agentInputDraft = text
@@ -2237,26 +2238,20 @@ struct ContentView: View {
         isLoadingTimeline = true
         timelineError = ""
         do {
-            guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
-            let result = try await ws.call("session.resume", params: ["session_id": session.id, "cols": 80])
-            if let resultDict = result as? [String: Any], let msgsArray = resultDict["messages"] as? [[String: Any]] {
-                let items = msgsArray.compactMap { dict -> TimelineItem? in
-                    let id = UUID().uuidString
-                    let role = dict["role"] as? String ?? "message"
-                    let type = role == "user" ? "user_goal" : (role == "tool" ? "tool_call" : "message")
-                    let text = dict["text"] as? String ?? dict["content"] as? String
-                    let name = dict["name"] as? String
-                    let context = dict["context"] as? String
-                    let toolCalls = name != nil ? "\(name ?? ""): \(context ?? "")" : nil
-                    return TimelineItem(id: id, type: type, text: text, markdown: nil, title: name, timestamp: "", toolName: name, toolCalls: toolCalls)
-                }
-                await MainActor.run {
-                    self.selectedTimeline = SessionTimeline(items: items)
-                }
-            } else {
-                await MainActor.run {
-                    self.selectedTimeline = SessionTimeline(items: [])
-                }
+            let sessionState = try await sessionMessages(for: session.id)
+            let recentMessages = Array(sessionState.messages.suffix(200))
+            let items = recentMessages.compactMap { dict -> TimelineItem? in
+                let id = UUID().uuidString
+                let role = dict["role"] as? String ?? "message"
+                let type = role == "user" ? "user_goal" : (role == "tool" ? "tool_call" : "message")
+                let text = dict["text"] as? String ?? dict["content"] as? String
+                let name = dict["name"] as? String
+                let context = dict["context"] as? String
+                let toolCalls = name != nil ? "\(name ?? ""): \(context ?? "")" : nil
+                return TimelineItem(id: id, type: type, text: text, markdown: nil, title: name, timestamp: "", toolName: name, toolCalls: toolCalls)
+            }
+            await MainActor.run {
+                self.selectedTimeline = SessionTimeline(items: items)
             }
         } catch {
             await MainActor.run {
@@ -2274,7 +2269,8 @@ struct ContentView: View {
         timelineError = ""
         do {
             guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
-            _ = try await ws.call("prompt.submit", params: ["session_id": session.id, "text": text])
+            let sessionState = try await sessionMessages(for: session.id)
+            _ = try await ws.call("prompt.submit", params: ["session_id": sessionState.activeSessionId, "text": text])
             await loadTimeline(for: session)
             followUpDraft = ""
         } catch {
@@ -2294,6 +2290,12 @@ struct ContentView: View {
         KeychainHelper.delete(key: "device_id")
         KeychainHelper.delete(key: "device_token")
         sessions = []
+        persistentAgents = []
+        resumedSessionIds = [:]
+        agentMessages = []
+        selectedTimeline = nil
+        wsClient?.disconnect()
+        wsClient = nil
         agents = []
         nodeName = ""
         statusMessage = "Disconnected"

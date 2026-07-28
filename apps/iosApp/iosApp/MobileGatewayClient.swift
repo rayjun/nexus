@@ -16,6 +16,8 @@ struct AgentInfo: Decodable, Identifiable {
 struct SessionSummary: Decodable, Identifiable, Hashable {
     let id: String
     let title: String
+    let preview: String
+    let messageCount: Int
     let status: String
     let createdAt: String
     let updatedAt: String
