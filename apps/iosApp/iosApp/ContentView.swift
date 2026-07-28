@@ -2095,22 +2095,36 @@ struct ContentView: View {
         isLoadingAgentMessages = true
         do {
             guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
-            let result = try await ws.call("session.history", params: ["session_id": agent.id])
+            let result = try await ws.call("session.resume", params: ["session_id": agent.id, "cols": 80])
             if let resultDict = result as? [String: Any], let msgsArray = resultDict["messages"] as? [[String: Any]] {
-                agentMessages = msgsArray.compactMap { dict in
-                    PersistentAgentMessage(
-                        id: dict["id"] as? String ?? UUID().uuidString,
+                let msgs = msgsArray.compactMap { dict -> PersistentAgentMessage? in
+                    let role = dict["role"] as? String ?? "user"
+                    let text = dict["text"] as? String ?? dict["content"] as? String ?? ""
+                    guard !text.isEmpty || role == "tool" else { return nil }
+                    return PersistentAgentMessage(
+                        id: UUID().uuidString,
                         agentId: agent.id,
-                        role: dict["role"] as? String ?? "user",
-                        content: dict["content"] as? String ?? dict["text"] as? String ?? "",
-                        createdAt: dict["timestamp"] as? String ?? ""
+                        role: role,
+                        content: text.isEmpty ? (dict["name"] as? String ?? "") + ": " + (dict["context"] as? String ?? "") : text,
+                        createdAt: ""
                     )
+                }
+                await MainActor.run {
+                    self.agentMessages = msgs
+                    self.isLoadingAgentMessages = false
+                }
+            } else {
+                await MainActor.run {
+                    self.agentMessages = []
+                    self.isLoadingAgentMessages = false
                 }
             }
         } catch {
-            statusMessage = error.localizedDescription
+            await MainActor.run {
+                self.statusMessage = error.localizedDescription
+                self.isLoadingAgentMessages = false
+            }
         }
-        isLoadingAgentMessages = false
     }
 
     private func sendAgentMsg(_ agent: PersistentAgent) async {
@@ -2224,26 +2238,33 @@ struct ContentView: View {
         timelineError = ""
         do {
             guard let ws = wsClient else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
-            let result = try await ws.call("session.history", params: ["session_id": session.id])
+            let result = try await ws.call("session.resume", params: ["session_id": session.id, "cols": 80])
             if let resultDict = result as? [String: Any], let msgsArray = resultDict["messages"] as? [[String: Any]] {
                 let items = msgsArray.compactMap { dict -> TimelineItem? in
-                    let id = dict["id"] as? String ?? UUID().uuidString
-                    let type = dict["type"] as? String ?? "message"
-                    let text = dict["content"] as? String ?? dict["text"] as? String
-                    let timestamp = dict["timestamp"] as? String ?? ""
-                    let toolName = dict["tool_name"] as? String
-                    let toolCalls = dict["tool_calls"] as? String
-                    return TimelineItem(id: id, type: type, text: text, markdown: nil, title: nil, timestamp: timestamp, toolName: toolName, toolCalls: toolCalls)
+                    let id = UUID().uuidString
+                    let role = dict["role"] as? String ?? "message"
+                    let type = role == "user" ? "user_goal" : (role == "tool" ? "tool_call" : "message")
+                    let text = dict["text"] as? String ?? dict["content"] as? String
+                    let name = dict["name"] as? String
+                    let context = dict["context"] as? String
+                    let toolCalls = name != nil ? "\(name ?? ""): \(context ?? "")" : nil
+                    return TimelineItem(id: id, type: type, text: text, markdown: nil, title: name, timestamp: "", toolName: name, toolCalls: toolCalls)
                 }
-                selectedTimeline = SessionTimeline(items: items)
+                await MainActor.run {
+                    self.selectedTimeline = SessionTimeline(items: items)
+                }
             } else {
-                selectedTimeline = SessionTimeline(items: [])
+                await MainActor.run {
+                    self.selectedTimeline = SessionTimeline(items: [])
+                }
             }
         } catch {
-            selectedTimeline = nil
-            timelineError = error.localizedDescription
+            await MainActor.run {
+                self.selectedTimeline = nil
+                self.timelineError = error.localizedDescription
+            }
         }
-        isLoadingTimeline = false
+        await MainActor.run { self.isLoadingTimeline = false }
     }
 
     private func appendGoal(to session: SessionSummary) async {
