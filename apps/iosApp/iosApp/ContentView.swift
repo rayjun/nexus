@@ -98,6 +98,10 @@ struct ContentView: View {
             loadFromCache()
             if isConnected {
                 Task { await loadHomeViaWS() }
+            } else {
+                #if DEBUG
+                Task { await connect() }
+                #endif
             }
         }
         .onChange(of: scenePhase) { phase in
@@ -1965,23 +1969,17 @@ struct ContentView: View {
     }
 
     private func loadHomeViaWS() async {
-        guard let ws = wsClient, ws.isConnected else {
-            print("[Nexus] loadHomeViaWS: wsClient nil or not connected")
-            return
-        }
-        print("[Nexus] loadHomeViaWS: starting")
+        guard let ws = wsClient, ws.isConnected else { return }
         isLoadingSessions = true
         isLoadingCron = true
         isLoadingApprovals = true
         isLoadingPersistentAgents = true
         do {
             // Load sessions
-            print("[Nexus] loadHomeViaWS: calling session.list...")
             let sessionsResult = try await ws.call("session.list", params: ["limit": 50])
-            print("[Nexus] loadHomeViaWS: session.list response received")
+            var newSessions: [SessionSummary] = []
             if let sessionsArray = (sessionsResult as? [String: Any])?["sessions"] as? [[String: Any]] {
-                print("[Nexus] loadHomeViaWS: parsed \(sessionsArray.count) sessions")
-                sessions = sessionsArray.compactMap { dict in
+                newSessions = sessionsArray.compactMap { dict in
                     let id = dict["id"] as? String ?? ""
                     let title = dict["title"] as? String ?? "Untitled"
                     let startedAt = dict["started_at"] as? Double ?? 0
@@ -1990,28 +1988,11 @@ struct ContentView: View {
                     let dateStr = String(format: "%.0f", startedAt)
                     return SessionSummary(id: id, title: title, status: status, createdAt: dateStr, updatedAt: dateStr)
                 }
-            } else {
-                print("[Nexus] loadHomeViaWS: sessions parse failed, result type: \(type(of: sessionsResult))")
-            }
-
-            // Update server info from session list
-            if var server = agents.first, sessions.count > 0 {
-                let updated = AgentInfo(
-                    id: server.id,
-                    name: server.name,
-                    baseUrl: server.baseUrl,
-                    status: "online",
-                    profile: server.profile,
-                    model: server.model,
-                    createdAt: server.createdAt,
-                    lastSeenAt: nil
-                )
-                agents = [updated]
-                selectedAgentServer = updated
             }
 
             // Load cron jobs
             let cronResult = try await ws.call("cron.manage", params: ["action": "list"])
+            var newCronJobs: [CronJobInfo] = []
             let cronJobsRaw: [[String: Any]]
             if let result = cronResult as? [String: Any], let jobs = result["jobs"] as? [[String: Any]] {
                 cronJobsRaw = jobs
@@ -2020,7 +2001,7 @@ struct ContentView: View {
             } else {
                 cronJobsRaw = []
             }
-            cronJobs = cronJobsRaw.compactMap { dict in
+            newCronJobs = cronJobsRaw.compactMap { dict in
                 CronJobInfo(
                     id: dict["job_id"] as? String ?? "",
                     name: dict["name"] as? String ?? "Unnamed",
@@ -2031,13 +2012,10 @@ struct ContentView: View {
                 )
             }
 
-            // Approvals come as events, not a list RPC — start empty
-            approvalList = []
-
-            // Persistent agents — Hermes doesn't have this concept via WS
-            // Show sessions as "agents" for the Agents tab
-            persistentAgents = sessions.prefix(5).compactMap { s in
-                PersistentAgent(
+            // Build persistent agents from sessions
+            let newPersistentAgents = newSessions.prefix(5).compactMap { s -> PersistentAgent? in
+                guard !s.id.isEmpty else { return nil }
+                return PersistentAgent(
                     id: s.id,
                     name: s.title,
                     description: s.status,
@@ -2050,13 +2028,42 @@ struct ContentView: View {
                 )
             }
 
+            // Update UI on main thread
+            await MainActor.run {
+                self.sessions = newSessions
+                self.cronJobs = newCronJobs
+                self.persistentAgents = newPersistentAgents
+                self.approvalList = []
+
+                if var server = agents.first, !newSessions.isEmpty {
+                    let updated = AgentInfo(
+                        id: server.id,
+                        name: server.name,
+                        baseUrl: server.baseUrl,
+                        status: "online",
+                        profile: server.profile,
+                        model: server.model,
+                        createdAt: server.createdAt,
+                        lastSeenAt: nil
+                    )
+                    self.agents = [updated]
+                    self.selectedAgentServer = updated
+                }
+
+                self.isLoadingSessions = false
+                self.isLoadingCron = false
+                self.isLoadingApprovals = false
+                self.isLoadingPersistentAgents = false
+            }
         } catch {
-            statusMessage = "Failed to load: \(error.localizedDescription)"
+            await MainActor.run {
+                self.statusMessage = "Failed to load: \(error.localizedDescription)"
+                self.isLoadingSessions = false
+                self.isLoadingCron = false
+                self.isLoadingApprovals = false
+                self.isLoadingPersistentAgents = false
+            }
         }
-        isLoadingSessions = false
-        isLoadingCron = false
-        isLoadingApprovals = false
-        isLoadingPersistentAgents = false
     }
 
     private func cacheToDisk() {
