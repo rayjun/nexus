@@ -2,10 +2,10 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
-    @AppStorage("gateway_base_url") private var gatewayBaseUrl = "http://127.0.0.1:8080"
+    @AppStorage("gateway_base_url") private var gatewayBaseUrl = ""
     @State private var deviceId = KeychainHelper.load(key: "device_id")
     @State private var deviceToken = KeychainHelper.load(key: "device_token")
-    @State private var gatewayInput = "http://127.0.0.1:8080"
+    @State private var gatewayInput = ""
     @State private var deviceName = UIDevice.current.name
     @State private var statusMessage = ""
     @State private var nodeName = ""
@@ -92,8 +92,11 @@ struct ContentView: View {
         .onAppear {
             gatewayInput = gatewayBaseUrl
             #if DEBUG
+            if gatewayInput.isEmpty {
+                gatewayInput = "https://100.91.132.51:8444"
+            }
             if apiKeyInput.isEmpty {
-                apiKeyInput = "hermes-mobile-local"
+                apiKeyInput = "c3b6ebfb53e7beae5492e40320f30cf1"
             }
             #endif
             loadFromCache()
