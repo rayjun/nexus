@@ -70,47 +70,7 @@ Nexus is a Hermes native mobile client. It requires real-time event push, stream
 
 Nexus uses **`HERMES_DASHBOARD_SESSION_TOKEN`**, not `API_SERVER_KEY`. These are completely independent authentication systems and are not interchangeable.
 
-### Scenario 1: Local Simulator (Simplest)
-
-The simulator runs on the same machine as the Dashboard. Direct loopback HTTP/WS — no Caddy or TLS needed.
-
-#### 1. Generate a Dashboard Token
-
-```bash
-TOKEN=$(openssl rand -hex 16)
-echo "HERMES_DASHBOARD_SESSION_TOKEN=$TOKEN" >> ~/.hermes/.env
-echo "Your token: $TOKEN"
-```
-
-#### 2. Start the Dashboard
-
-```bash
-export HERMES_DASHBOARD_SESSION_TOKEN="$TOKEN"
-hermes dashboard --port 8080 --host 127.0.0.1 --insecure
-```
-
-- `--host 127.0.0.1` — bind to loopback, no external access needed
-- `--insecure` — use token-based auth without OAuth gate
-
-Verify:
-
-```bash
-curl -s http://127.0.0.1:8080/api/status | python3 -m json.tool
-```
-
-Should return `"gateway_state": "running"` and `"overall": "ok"`.
-
-#### 3. Connect from Nexus
-
-In DEBUG mode the app auto-fills `http://127.0.0.1:8080` and the token, then connects automatically. To connect manually:
-
-- **GATEWAY**: `http://127.0.0.1:8080`
-- **API KEY**: the token you generated
-- Tap **Connect**
-
-The app automatically converts `http://` to `ws://` and appends `/api/ws?token=YOUR_TOKEN`.
-
-### Scenario 2: Remote Device via Caddy WSS
+### Scenario 1: Remote Device via Caddy WSS
 
 iOS 26+ requires TLS for all network connections. A remote device needs Caddy as an HTTPS/WSS reverse proxy.
 
@@ -178,7 +138,7 @@ The app automatically:
 4. Dashboard validates the token and accepts the connection
 5. The app accepts self-signed certificates via `InsecureURLSessionDelegate`
 
-### Scenario 3: Tailscale Direct (Recommended, Simplest)
+### Scenario 2: Tailscale Direct (Recommended, Simplest)
 
 If both your device and server are on the same Tailscale network, you can connect directly without Caddy.
 
@@ -204,7 +164,7 @@ hermes dashboard --port 8080 --host 0.0.0.0 --insecure
 
 Dashboard WebSocket authentication logic (from `web_server.py`, `_ws_auth_reason`):
 
-1. **Loopback / `--insecure` mode** (Scenarios 1 & 3):
+1. **Loopback / `--insecure` mode** (Scenario 2):
    - Client sends `?token=<HERMES_DASHBOARD_SESSION_TOKEN>`
    - Server compares with `hmac.compare_digest` (constant-time)
    - Match → accept; mismatch → close with code 4401
@@ -257,32 +217,7 @@ After setup, verify in order:
 
 ## iOS App Installation
 
-### Build & Run (Simulator)
-
-```bash
-cd apps/iosApp
-open iosApp.xcodeproj
-# In Xcode: select iosApp scheme, choose simulator, Run (⌘R)
-```
-
-### Install to Simulator (CLI)
-
-```bash
-# Build
-xcodebuild -project apps/iosApp/iosApp.xcodeproj \
-  -scheme iosApp \
-  -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  build
-
-# Install and launch
-SIM_ID=$(xcrun simctl list devices booted | grep "iPhone" | grep -oE '[0-9A-F-]{36}')
-APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-*/Build/Products/Debug-iphonesimulator/iosApp.app -maxdepth 0 | head -1)
-xcrun simctl install "$SIM_ID" "$APP_PATH"
-xcrun simctl launch "$SIM_ID" com.rayjun.nexus
-```
-
-### Install to Real Device
+### Build & Install to Real Device
 
 ```bash
 # Build for device
