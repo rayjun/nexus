@@ -1,0 +1,94 @@
+import Foundation
+import CryptoKit
+
+enum E2ECrypto {
+    static let hkdfSalt = "nexus-e2e".data(using: .utf8)!
+    static let hkdfInfo = "chachapoly-key".data(using: .utf8)!
+    static let keySize = 32
+    static let nonceSize = 12
+
+    static func generateKeyPair() -> (priv: Data, pub: Data) {
+        let priv = Curve25519.KeyAgreement.PrivateKey()
+        return (Data(priv.rawRepresentation), Data(priv.publicKey.rawRepresentation))
+    }
+
+    static func computeSharedSecret(myPriv: Data, peerPub: Data) -> Data? {
+        guard let priv = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: myPriv),
+              let pub = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: peerPub) else {
+            return nil
+        }
+        guard let shared = try? priv.sharedSecretFromKeyAgreement(with: pub) else {
+            return nil
+        }
+        let derived = shared.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: hkdfSalt,
+            sharedInfo: hkdfInfo,
+            outputByteCount: keySize
+        )
+        return derived.withUnsafeBytes { Data($0) }
+    }
+
+    static func encrypt(plaintext: Data, key: Data, sequence: UInt32, channelId: String) -> String? {
+        guard key.count == keySize else { return nil }
+        let symKey = SymmetricKey(data: key)
+        var seqBytes = withUnsafeBytes(of: sequence.bigEndian) { Data($0) }
+        let chBytes = channelIdToBytes(channelId)
+        let nonce = seqBytes + chBytes
+
+        guard let chachaNonce = try? ChaChaPoly.Nonce(data: nonce),
+              let sealed = try? ChaChaPoly.seal(plaintext, using: symKey, nonce: chachaNonce) else {
+            return nil
+        }
+        let combined = nonce + sealed.ciphertext + sealed.tag
+        return combined.base64EncodedString()
+    }
+
+    static func decrypt(wirePayload: String, key: Data) -> Data? {
+        guard key.count == keySize else { return nil }
+        guard let raw = Data(base64Encoded: wirePayload) else { return nil }
+        guard raw.count > nonceSize else { return nil }
+        let nonce = raw.prefix(nonceSize)
+        let ciphertextWithTag = raw.suffix(from: nonceSize)
+        let symKey = SymmetricKey(data: key)
+        guard let chachaNonce = try? ChaChaPoly.Nonce(data: nonce),
+              let sealed = try? ChaChaPoly.SealedBox(nonce: chachaNonce,
+                                                      ciphertext: ciphertextWithTag.prefix(ciphertextWithTag.count - 16),
+                                                      tag: ciphertextWithTag.suffix(16)) else {
+            return nil
+        }
+        return try? ChaChaPoly.open(sealed, using: symKey)
+    }
+
+    static func encryptJSON(_ json: [String: Any], key: Data, sequence: UInt32, channelId: String) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: json) else { return nil }
+        return encrypt(plaintext: data, key: key, sequence: sequence, channelId: channelId)
+    }
+
+    static func decryptJSON(_ wirePayload: String, key: Data) -> [String: Any]? {
+        guard let data = decrypt(wirePayload: wirePayload, key: key) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    static func channelIdFromPairingCode(_ code: String) -> String {
+        let hash = SHA256.hash(data: code.data(using: .utf8)!)
+        return hash.withUnsafeBytes { Data($0) }
+            .prefix(4)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    private static func channelIdToBytes(_ channelId: String) -> Data {
+        var hex = channelId.padding(toLength: 16, withPad: "0", startingAt: 0)
+        if hex.count > 16 { hex = String(hex.prefix(16)) }
+        var bytes = [UInt8](repeating: 0, count: 8)
+        for i in stride(from: 0, to: 16, by: 2) {
+            let start = hex.index(hex.startIndex, offsetBy: i)
+            let end = hex.index(start, offsetBy: 2)
+            if let byte = UInt8(hex[start..<end], radix: 16) {
+                bytes[i / 2] = byte
+            }
+        }
+        return Data(bytes)
+    }
+}

@@ -90,22 +90,8 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            gatewayInput = gatewayBaseUrl
-            #if DEBUG
-            if gatewayInput.isEmpty {
-                gatewayInput = "https://erc8004list.xyz"
-            }
-            if apiKeyInput.isEmpty {
-                apiKeyInput = "c3b6ebfb53e7beae5492e40320f30cf1"
-            }
-            #endif
-            loadFromCache()
-            if isConnected {
-                Task { await loadHomeViaWS() }
-            } else {
-                #if DEBUG
-                Task { await connect() }
-                #endif
+            if RelayClient.shared.isPaired && !RelayClient.shared.isConnected {
+                RelayClient.shared.connect()
             }
         }
         .onChange(of: scenePhase) { phase in
