@@ -34,9 +34,11 @@ MOBILE_DIR = Path.home() / ".hermes" / "mobile"
 
 
 class MobileRelayClient:
-    def __init__(self, relay_url: str):
+    def __init__(self, relay_url: str, dashboard_url: str = ""):
         self.relay_url = relay_url
+        self.dashboard_url = dashboard_url
         self.ws = None
+        self.dash_ws = None
         self.channel_id: str | None = None
         self.enc_key: bytes | None = None
         self.send_seq = 0
@@ -208,7 +210,7 @@ class MobileRelayClient:
                 await asyncio.sleep(3)
 
     async def handle_rpc(self, rpc: dict) -> dict | None:
-        """Bridge JSON-RPC to Hermes dispatch(). Placeholder — replace with real dispatch."""
+        """Bridge JSON-RPC to Hermes Dashboard via WebSocket."""
         method = rpc.get("method", "")
         rid = rpc.get("id")
         params = rpc.get("params", {})
@@ -219,45 +221,48 @@ class MobileRelayClient:
         if method == "event" and params.get("type") == "paired":
             return None
 
-        if method == "session.list":
-            return {"jsonrpc": "2.0", "id": rid, "result": {"sessions": [
-                {"id": "s1", "title": "Test Session 1", "preview": "Hello world", "message_count": 5, "started_at": 1754000000.0},
-                {"id": "s2", "title": "Test Session 2", "preview": "Write a script", "message_count": 3, "started_at": 1754000100.0},
-            ]}}
+        return await self.dashboard_call(method, params, rid)
 
-        if method == "cron.manage":
-            return {"jsonrpc": "2.0", "id": rid, "result": {"jobs": [
-                {"job_id": "j1", "name": "Daily Report", "schedule": "0 9 * * *", "enabled": True},
-            ]}}
+    async def dashboard_call(self, method: str, params: dict, rid) -> dict:
+        """Forward a JSON-RPC call to the real Hermes Dashboard."""
+        if self.dash_ws is None:
+            try:
+                self.dash_ws = await websockets.connect(
+                    self.dashboard_url, ping_interval=30, ping_timeout=90
+                )
+                # Consume gateway.ready
+                await asyncio.wait_for(self.dash_ws.recv(), timeout=5)
+                log.info("connected to dashboard: %s", self.dashboard_url)
+            except Exception as e:
+                log.warning("dashboard connect failed: %s", e)
+                self.dash_ws = None
+                return {"jsonrpc": "2.0", "id": rid,
+                        "result": {"error": f"dashboard unavailable: {e}"}}
 
-        if method == "session.resume":
-            return {"jsonrpc": "2.0", "id": rid, "result": {
-                "session_id": params.get("session_id", "s1"),
-                "messages": [
-                    {"role": "user", "content": "Hello", "id": "m1"},
-                    {"role": "assistant", "content": "Hi there!", "id": "m2"},
-                ],
-            }}
-
-        if method == "session.history":
-            return {"jsonrpc": "2.0", "id": rid, "result": {
-                "messages": [
-                    {"role": "user", "content": "Hello", "id": "m1"},
-                    {"role": "assistant", "content": "Hi there!", "id": "m2"},
-                ],
-            }}
-
-        return {"jsonrpc": "2.0", "id": rid, "result": {}}
+        req = {"jsonrpc": "2.0", "id": "relay-" + str(rid), "method": method, "params": params}
+        try:
+            await self.dash_ws.send(json.dumps(req))
+            while True:
+                raw = await asyncio.wait_for(self.dash_ws.recv(), timeout=30)
+                msg = json.loads(raw)
+                # Skip event pushes, find our response
+                if msg.get("id") == "relay-" + str(rid):
+                    return {"jsonrpc": "2.0", "id": rid, "result": msg.get("result", {})}
+        except Exception as e:
+            log.warning("dashboard call failed: %s", e)
+            return {"jsonrpc": "2.0", "id": rid,
+                    "result": {"error": f"dashboard call failed: {e}"}}
 
 
 def main():
     parser = argparse.ArgumentParser(description="Hermes mobile relay client")
     parser.add_argument("--relay", default="wss://erc8004list.xyz/relay", help="Relay URL")
+    parser.add_argument("--dashboard", default="", help="Hermes Dashboard WS URL (e.g. ws://127.0.0.1:9119/api/ws?token=...)")
     parser.add_argument("--pair", action="store_true", help="Generate pairing code")
     parser.add_argument("--code", default=None, help="Use specific pairing code")
     args = parser.parse_args()
 
-    client = MobileRelayClient(args.relay)
+    client = MobileRelayClient(args.relay, args.dashboard)
 
     if args.pair:
         code = args.code or str(hash(os.urandom(4)) % 1000000).zfill(6)
