@@ -1,52 +1,45 @@
 # Nexus
 
-A native iOS app for managing AI agents powered by Hermes Agent. Connect directly to your Hermes gateway via WebSocket, chat with agents, browse sessions, and monitor tasks — all from your phone.
+A native iOS app for managing AI agents powered by Hermes Agent. Connect to your Hermes gateway over an E2E-encrypted relay channel, chat with agents, browse sessions, and monitor tasks — all from your phone.
 
 ## Features
 
-- **WebSocket Connection** — Direct JSON-RPC over WebSocket to Hermes gateway, no intermediate server needed
+- **Relay Connection** — E2E-encrypted (X25519 + ChaCha20-Poly1305) WebSocket through a lightweight public relay; no inbound ports on the agent server, no TLS certificate management on devices
+- **Pairing** — 6-digit pairing code, single-use; keys persist for automatic reconnect
 - **Session Management** — Browse and resume Hermes sessions with full timeline view
 - **Agent Chat** — Send messages to Hermes agents with streaming response support
-- **Real-time Events** — Live tool call updates, approval requests, and session status via WebSocket
+- **Real-time Events** — Live tool call updates, approval requests, and session status
 - **Markdown Rendering** — Headings, bold, italic, code blocks with syntax highlighting, lists, blockquotes, links
 - **Dark Mode** — Full dark mode support following system appearance
-- **Secure Storage** — API keys stored in iOS Keychain
-- **Auto-Reconnect** — Automatically reconnects on connection drops
+- **Secure Storage** — E2E keys stored in iOS Keychain
 
 ## Requirements
 
 - iOS 16.0+
 - Xcode 15+ or Swift 5.9+
 - Hermes Agent v0.19.0+ with dashboard server enabled
-- Nginx or Caddy (any HTTPS/WSS reverse proxy) for TLS termination
+- A public relay server (see [Relay Deployment](docs/RELAY-DEPLOYMENT.md))
 
 ## Architecture
 
 ```
-┌──────────────┐     WSS/JSON-RPC     ┌──────────────────┐
-│  Nexus iOS   │◄────────────────────►│  Nginx/Caddy     │
-│  (SwiftUI)   │     wss://host:8444  │  (TLS :8444)     │
-└──────────────┘                      └────────┬─────────┘
-                                               │ reverse proxy
-                                               ▼
-                                      ┌──────────────────┐
-                                      │  Hermes Dashboard│
-                                      │  (127.0.0.1:9119) │
-                                      │  /api/ws          │
-                                      └────────┬─────────┘
-                                               │
-                                               ▼
-                                      ┌──────────────────┐
-                                      │  Hermes Agent    │
-                                      │  (LLM + tools)   │
-                                      └──────────────────┘
+┌──────────────┐     WSS (outbound)    ┌──────────┐     WSS (outbound)    ┌──────────────┐
+│ Hermes Agent │ ←──────────────────→  │  Relay   │  ←──────────────────→  │  Nexus App   │
+│ (user server)│   E2E encrypted      │ (public)  │   E2E encrypted       │ (iOS/Android) │
+└──────────────┘                      └──────────┘                      └──────────────┘
 ```
 
-- **iOS App** (SwiftUI): WebSocket JSON-RPC client, chat UI, session browser
-- **Nginx/Caddy**: TLS termination, reverse proxy to loopback Dashboard
-- **Hermes Dashboard** (`hermes dashboard`): WebSocket endpoint `/api/ws` with JSON-RPC methods (`session.list`, `prompt.submit`, `approval.respond`, etc.), bound to `127.0.0.1`
+- **Relay Server** (`relay/relay_server.py`): public server behind Caddy + Let's Encrypt. Routes encrypted bytes between paired endpoints. Never sees plaintext.
+- **Agent Client** (`relay/relay_agent.py`): runs next to Hermes Gateway, bridges E2E-encrypted JSON-RPC to the real Dashboard WebSocket. Connects outbound — opens no inbound ports.
+- **iOS App** (SwiftUI): `RelayClient.swift` + `E2ECrypto.swift` (CryptoKit), pairing UI + encrypted JSON-RPC.
+
+Full deployment instructions: [docs/RELAY-DEPLOYMENT.md](docs/RELAY-DEPLOYMENT.md)
+
+> **Legacy direct connection** (Nginx/Caddy → Dashboard `/api/ws?token=`) is documented below for reference. New deployments should use the Relay + E2E architecture above.
 
 ## Connection Setup
+
+> **Note for legacy direct connection.** New deployments: see [Relay Deployment](docs/RELAY-DEPLOYMENT.md) — pair once with a 6-digit code, no URLs or tokens to configure.
 
 Nexus connects to the Hermes Dashboard via WebSocket + JSON-RPC. The Dashboard must bind to loopback (`127.0.0.1`) so that the session token authentication works. A reverse proxy (Nginx or Caddy) provides TLS termination for remote device access.
 
