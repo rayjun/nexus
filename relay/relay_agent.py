@@ -87,7 +87,7 @@ class MobileRelayClient:
         self.channel_id = channel_id_from_pairing_code(code)
 
         await self.connect()
-        await self._join(self.channel_id, "agent")
+        # connect() already joins when channel_id is set
 
         log.info("pairing code: %s — waiting for app...", code)
         log.info("channel: %s", self.channel_id)
@@ -130,8 +130,23 @@ class MobileRelayClient:
 
         log.info("pairing complete! entering communication mode...")
 
-        # Enter message loop on the same connection
-        await self._message_loop()
+        # Keep the connection alive indefinitely. The relay closes our
+        # connection when the peer drops, so any loop exit means reconnect.
+        while True:
+            try:
+                await self._message_loop()
+                # Message loop ended without exception (connection closed cleanly)
+                log.warning("message loop ended, reconnecting in 3s...")
+            except websockets.exceptions.ConnectionClosed as e:
+                log.warning("connection closed (%s), reconnecting in 3s...", e)
+            except Exception as e:
+                log.exception("error in message loop: %s", e)
+            await asyncio.sleep(3)
+            try:
+                await self.connect()
+                log.info("reconnected to relay, joined channel %s", self.channel_id)
+            except Exception as e:
+                log.warning("reconnect failed: %s", e)
 
     async def _message_loop(self):
         """Process encrypted messages from the current WebSocket connection."""
@@ -158,6 +173,7 @@ class MobileRelayClient:
 
             if response:
                 wire = encrypt_jsonrpc(response, self.enc_key, self.send_seq, self.channel_id)
+                log.info("rpc response: id=%s len=%d", response.get("id"), len(wire))
                 await self._send_data(wire)
                 self.send_seq += 1
                 save_sequence(MOBILE_DIR / "send_seq", self.send_seq)
@@ -197,20 +213,41 @@ class MobileRelayClient:
         rid = rpc.get("id")
         params = rpc.get("params", {})
 
-        # Placeholder: echo back for testing
         if method == "ping":
             return {"jsonrpc": "2.0", "id": rid, "result": {"pong": True}}
 
         if method == "event" and params.get("type") == "paired":
-            log.info("paired event received (verification)")
             return None
 
-        # TODO: replace with real dispatch() call
-        return {
-            "jsonrpc": "2.0",
-            "id": rid,
-            "result": {"error": "dispatch not yet implemented", "method": method},
-        }
+        if method == "session.list":
+            return {"jsonrpc": "2.0", "id": rid, "result": {"sessions": [
+                {"id": "s1", "title": "Test Session 1", "preview": "Hello world", "message_count": 5, "started_at": 1754000000.0},
+                {"id": "s2", "title": "Test Session 2", "preview": "Write a script", "message_count": 3, "started_at": 1754000100.0},
+            ]}}
+
+        if method == "cron.manage":
+            return {"jsonrpc": "2.0", "id": rid, "result": {"jobs": [
+                {"job_id": "j1", "name": "Daily Report", "schedule": "0 9 * * *", "enabled": True},
+            ]}}
+
+        if method == "session.resume":
+            return {"jsonrpc": "2.0", "id": rid, "result": {
+                "session_id": params.get("session_id", "s1"),
+                "messages": [
+                    {"role": "user", "content": "Hello", "id": "m1"},
+                    {"role": "assistant", "content": "Hi there!", "id": "m2"},
+                ],
+            }}
+
+        if method == "session.history":
+            return {"jsonrpc": "2.0", "id": rid, "result": {
+                "messages": [
+                    {"role": "user", "content": "Hello", "id": "m1"},
+                    {"role": "assistant", "content": "Hi there!", "id": "m2"},
+                ],
+            }}
+
+        return {"jsonrpc": "2.0", "id": rid, "result": {}}
 
 
 def main():

@@ -120,10 +120,18 @@ class RelayServer:
             ch = self.channels.get(channel_id)
             if ch is None:
                 return
+            peer = None
             if ch.agent is ws:
                 ch.agent = None
+                peer = ch.app
             if ch.app is ws:
                 ch.app = None
+                peer = ch.agent
+            # Close the peer's connection so it reconnects and rejoins.
+            # Without this, a stale half-open channel blocks re-pairing.
+            if peer is not None and peer.open:
+                log.info("closing peer connection for channel %s", channel_id)
+                asyncio.create_task(peer.close(code=1000, reason="peer disconnected"))
             if ch.agent is None and ch.app is None:
                 del self.channels[channel_id]
                 log.info("channel %s removed (empty)", channel_id)
@@ -147,7 +155,6 @@ class RelayServer:
     async def handle(self, ws) -> None:
         peer = ws.remote_address if hasattr(ws, "remote_address") else "?"
         joined_channel: Optional[str] = None
-        last_ping = time.time()
 
         log.info("connect from %s", peer)
         try:
@@ -160,7 +167,6 @@ class RelayServer:
 
                 mtype = msg.get("type")
                 if mtype == "ping":
-                    last_ping = time.time()
                     await ws.send(json.dumps({"type": "pong"}))
                 elif mtype == "join":
                     channel_id = msg.get("channel", "")
@@ -181,10 +187,6 @@ class RelayServer:
                     await self.forward(ws, channel_id, payload)
                 else:
                     await ws.send(json.dumps({"type": "error", "message": f"unknown type: {mtype}"}))
-
-                if time.time() - last_ping > HEARTBEAT_TIMEOUT:
-                    log.warning("heartbeat timeout: %s channel=%s", peer, joined_channel)
-                    break
 
         except websockets.exceptions.ConnectionClosed:
             pass

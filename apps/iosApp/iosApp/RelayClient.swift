@@ -136,7 +136,14 @@ final class RelayClient: NSObject, ObservableObject {
 
     private func handlePaired() {
         relayLog("paired event from relay")
-        DispatchQueue.main.async { self.pairingState = .waitingForAgent }
+        if isPaired {
+            // Already paired — this is a reconnection, go straight to communication
+            relayLog("reconnected, entering communication mode")
+            DispatchQueue.main.async { self.pairingState = .paired }
+        } else {
+            // First-time pairing — wait for agent's public key
+            DispatchQueue.main.async { self.pairingState = .waitingForAgent }
+        }
     }
 
     private func sendPublicKey() {
@@ -181,20 +188,21 @@ final class RelayClient: NSObject, ObservableObject {
         case "data":
             let payload = msg["payload"] as? String ?? ""
 
-            if case .waitingForAgent = pairingState {
-                // This is the agent's public key (plaintext during pairing)
+            if !isPaired, case .waitingForAgent = pairingState {
+                // First-time pairing: this data is the agent's public key (plaintext)
                 sendPublicKey()
                 handleAgentPublicKey(payload)
+            } else if isPaired {
+                // Already paired: all data is encrypted JSON-RPC
+                handleEncryptedData(payload)
             } else if case .paired = pairingState {
-                // First encrypted message — should be paired confirmation
+                // First-time pairing: first encrypted message is the paired confirmation
                 if let rpc = E2ECrypto.decryptJSON(payload, key: encKey) {
                     if let params = rpc["params"] as? [String: Any],
                        params["type"] as? String == "paired" {
                         relayLog("pairing verified ✓")
                     }
                 }
-            } else if isPaired {
-                handleEncryptedData(payload)
             }
         case "pong":
             break
@@ -232,21 +240,20 @@ final class RelayClient: NSObject, ObservableObject {
                     userInfo: ["event": eventType, "data": params]
                 )
             }
-        } else if let id = id {
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(
-                    name: NSNotification.Name("RelayResponse"),
-                    object: nil,
-                    userInfo: ["id": id, "result": rpc["result"] ?? [:]]
-                )
-            }
+        } else if let id = id as? Int {
+            pendingLock.lock()
+            let cont = pending.removeValue(forKey: id)
+            pendingLock.unlock()
+            cont?.resume(returning: rpc["result"] ?? [:])
         }
     }
 
+    private var pending: [Int: CheckedContinuation<Any, Error>] = [:]
+    private let pendingLock = NSLock()
+
     // MARK: - RPC
 
-    @discardableResult
-    func call(_ method: String, params: [String: Any] = [:]) -> Int {
+    func call(_ method: String, params: [String: Any] = [:]) async throws -> Any {
         let id = Int.random(in: 1...999999)
         let rpc: [String: Any] = [
             "jsonrpc": "2.0",
@@ -256,14 +263,26 @@ final class RelayClient: NSObject, ObservableObject {
         ]
 
         guard let wire = E2ECrypto.encryptJSON(rpc, key: encKey, sequence: sendSeq, channelId: channelID) else {
-            relayLog("encrypt failed for method=%@", method)
-            return id
+            throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "encrypt failed"])
         }
 
         sendSeq += 1
         send(["type": "data", "channel": channelID, "payload": wire])
         relayLog("rpc sent: method=%@ id=%d", method, id)
-        return id
+
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Any, Error>) in
+            pendingLock.lock()
+            pending[id] = cont
+            pendingLock.unlock()
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + 30) { [weak self] in
+                guard let self else { return }
+                self.pendingLock.lock()
+                let cont = self.pending.removeValue(forKey: id)
+                self.pendingLock.unlock()
+                cont?.resume(throwing: NSError(domain: "Nexus", code: 2, userInfo: [NSLocalizedDescriptionKey: "rpc timeout"]))
+            }
+        }
     }
 
     // MARK: - WebSocket
