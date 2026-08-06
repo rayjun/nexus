@@ -4,6 +4,7 @@ struct PairingView: View {
     @State private var code = ""
     @State private var isError = false
     @State private var errorMessage = ""
+    @State private var relayUrlDraft = ""
     @ObservedObject private var relay = RelayClient.shared
 
     var body: some View {
@@ -67,8 +68,69 @@ struct PairingView: View {
                 .padding(.top, 24)
             }
 
+            // Relay server config — must be reachable BEFORE pairing, so it
+            // lives on the pairing screen, not hidden in Dashboard settings.
+            relayConfigCard
+
             Spacer()
         }
+        .onAppear {
+            relayUrlDraft = UserDefaults.standard.string(forKey: "relay_url") ?? relay.currentRelayURL
+        }
+    }
+
+    private var relayConfigCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 14))
+                    .foregroundColor(.blue)
+                Text("Relay Server")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primary)
+                Spacer()
+                Text("Current: \(relay.currentRelayURL)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+
+            TextField("wss://your-relay-domain/relay", text: $relayUrlDraft)
+                .font(.system(size: 14, design: .monospaced))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .padding(10)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color(.separator), lineWidth: 0.5))
+
+            Button(action: saveRelayUrl) {
+                Text("Save & Reconnect")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(.separator), lineWidth: 0.5))
+        .padding(.horizontal, 24)
+        .padding(.top, 28)
+    }
+
+    private func saveRelayUrl() {
+        let trimmed = relayUrlDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed),
+              url.scheme == "wss" || url.scheme == "ws" else {
+            isError = true
+            errorMessage = "Enter a valid wss:// relay URL"
+            return
+        }
+        UserDefaults.standard.set(trimmed, forKey: "relay_url")
+        relay.disconnect()
+        relay.connect()
     }
 
     private var isConnecting: Bool {
