@@ -3,21 +3,22 @@
 X25519 key agreement + ChaCha20-Poly1305 AEAD encryption.
 Used by both Hermes Agent (Python) and Nexus App (Swift, via E2ECrypto.swift).
 
-Dependencies: pynacl (X25519, ChaCha20-Poly1305), cryptography (HKDF)
+Dependencies: pynacl (X25519, ChaCha20-Poly1305). HKDF-SHA256 is implemented
+with the standard library (hashlib + hmac) to keep the dependency surface
+minimal and avoid cryptography package ABI issues across Python versions.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import os
 import struct
 from pathlib import Path
 from typing import Optional
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from nacl.bindings import (
     crypto_box_beforenm,
     crypto_aead_chacha20poly1305_ietf_encrypt,
@@ -25,6 +26,25 @@ from nacl.bindings import (
     crypto_aead_chacha20poly1305_ietf_NPUBBYTES,
 )
 from nacl.public import PrivateKey, PublicKey
+
+
+def _hkdf_sha256(ikm: bytes, length: int, salt: bytes, info: bytes) -> bytes:
+    """RFC 5869 HKDF-SHA256 using only the standard library.
+
+    Matches cryptography.hazmat HKDF output byte-for-byte for the same
+    salt/info/length (used by the Swift side via CryptoKit).
+    """
+    if not salt:
+        salt = bytes(hashlib.sha256().digest_size)
+    prk = hmac.new(salt, ikm, hashlib.sha256).digest()
+    out = b""
+    t = b""
+    counter = 1
+    while len(out) < length:
+        t = hmac.new(prk, t + info + bytes([counter]), hashlib.sha256).digest()
+        out += t
+        counter += 1
+    return out[:length]
 
 
 HKDF_SALT = b"nexus-e2e"
@@ -74,13 +94,7 @@ def derive_enc_key(shared_secret: bytes, direction: str = "") -> bytes:
     info = HKDF_INFO
     if direction:
         info = HKDF_INFO + b"-" + direction.encode("utf-8")
-    kdf = HKDF(
-        algorithm=hashes.SHA256(),
-        length=KEY_SIZE,
-        salt=HKDF_SALT,
-        info=info,
-    )
-    return kdf.derive(shared_secret)
+    return _hkdf_sha256(shared_secret, KEY_SIZE, HKDF_SALT, info)
 
 
 def compute_shared_secret(my_priv: bytes, peer_pub: bytes) -> bytes:
