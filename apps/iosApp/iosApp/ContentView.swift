@@ -26,6 +26,9 @@ struct ContentView: View {
     @State private var isAppendingGoal = false
     @State private var agentNameDraft = ""
     @State private var agentUrlDraft = ""
+    @State private var serverRelayDraft = ""
+    @State private var serverNameDraft = ""
+    @State private var serverCodeDraft = ""
     @State private var isAddingAgent = false
     @State private var isShowingAddServer = false
     @State private var removingAgentId: String?
@@ -211,8 +214,9 @@ struct ContentView: View {
                     }
                     .buttonStyle(.plain)
                     Button {
-                        agentNameDraft = ""
-                        agentUrlDraft = ""
+                        serverRelayDraft = UserDefaults.standard.string(forKey: "relay_url") ?? relay.activeServer?.relayURL ?? ""
+                        serverNameDraft = ""
+                        serverCodeDraft = ""
                         isShowingAddServer = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
@@ -244,8 +248,9 @@ struct ContentView: View {
                             .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(NexusStyle.muted)
                         Button {
-                            agentNameDraft = ""
-                            agentUrlDraft = ""
+                            serverRelayDraft = UserDefaults.standard.string(forKey: "relay_url") ?? relay.activeServer?.relayURL ?? ""
+                            serverNameDraft = ""
+                            serverCodeDraft = ""
                             isShowingAddServer = true
                         } label: {
                             HStack(spacing: 6) {
@@ -291,30 +296,26 @@ struct ContentView: View {
             ZStack {
                 NexusStyle.background.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 16) {
-                    desktopField(title: "SERVER NAME", text: $agentNameDraft, placeholder: "Local Hermes", systemImage: "server.rack")
-                    desktopField(title: "SERVER URL", text: $agentUrlDraft, placeholder: "https://your-server:8444", systemImage: "network")
+                    desktopField(title: "RELAY URL", text: $serverRelayDraft, placeholder: "wss://relay.example.com/relay", systemImage: "arrow.triangle.2.circlepath")
+                    desktopField(title: "SERVER NAME (OPTIONAL)", text: $serverNameDraft, placeholder: "My Agent", systemImage: "server.rack")
+                    desktopField(title: "PAIRING CODE", text: $serverCodeDraft, placeholder: "K7M2P9QX", systemImage: "key.fill")
                     Spacer()
                     Button {
-                        Task {
-                            await addAgent()
-                            if !statusMessage.lowercased().contains("error") {
-                                isShowingAddServer = false
-                            }
-                        }
+                        addServerFromSheet()
                     } label: {
                         HStack(spacing: 8) {
                             if isAddingAgent {
                                 ProgressView().tint(.white)
                             }
-                            Text(isAddingAgent ? "Adding…" : "Add Server")
+                            Text(isAddingAgent ? "Pairing…" : "Add Server")
                                 .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
-                        .background(canAddAgent ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(canAddServerFromSheet ? NexusStyle.blue : NexusStyle.subtleText, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .disabled(!canAddAgent || isAddingAgent)
+                    .disabled(!canAddServerFromSheet || isAddingAgent)
                 }
                 .padding(18)
             }
@@ -334,6 +335,29 @@ struct ContentView: View {
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
+    }
+
+    private var canAddServerFromSheet: Bool {
+        !serverRelayDraft.isEmpty && serverCodeDraft.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8
+    }
+
+    private func addServerFromSheet() {
+        let relay = serverRelayDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = serverCodeDraft.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let name = serverNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: relay), url.scheme == "wss" || url.scheme == "ws" else {
+            toast = ToastMessage(text: "Enter a valid wss:// relay URL", kind: .error)
+            return
+        }
+        isAddingAgent = true
+        UserDefaults.standard.set(relay, forKey: "relay_url")
+        self.relay.addServer(relayURL: relay, name: name.isEmpty ? nil : name, code: code)
+        serverRelayDraft = ""
+        serverCodeDraft = ""
+        serverNameDraft = ""
+        isAddingAgent = false
+        isShowingAddServer = false
+        toast = ToastMessage(text: "Server added, pairing…", kind: .success)
     }
 
     private var editServerSheet: some View {
