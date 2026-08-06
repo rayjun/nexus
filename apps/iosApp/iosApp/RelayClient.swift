@@ -33,9 +33,9 @@ final class RelayClient: NSObject, ObservableObject {
     private var keyPairPriv: Data = Data()
     private var keyPairPub: Data = Data()
 
-    /// C4: relay URL is configurable via UserDefaults; production default is
-    /// the public relay. DEBUG builds fall back to the local relay for
-    /// simulator testing.
+    /// C4: relay URL is configurable via UserDefaults (`relay_url`); DEBUG
+    /// builds fall back to the local relay for simulator testing. Set
+    /// `relay_url` to your deployed relay (e.g. wss://relay.example.com/relay).
     private var relayURL: String {
         if let configured = UserDefaults.standard.string(forKey: "relay_url"), !configured.isEmpty {
             return configured
@@ -43,7 +43,7 @@ final class RelayClient: NSObject, ObservableObject {
         #if DEBUG
         return "ws://127.0.0.1:9120"
         #else
-        return "wss://erc8004list.xyz/relay"
+        return "wss://relay.example.com/relay"
         #endif
     }
 

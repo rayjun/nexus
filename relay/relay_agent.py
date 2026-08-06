@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Hermes Agent mobile relay client — connects to Relay, bridges JSON-RPC over E2E.
 
-Run: python3 relay_agent.py --relay wss://erc8004list.xyz/relay --pair
+Run: python3 relay_agent.py --relay wss://relay.example.com/relay --pair
 
-Once paired, starts automatically with: python3 relay_agent.py --relay wss://erc8004list.xyz/relay
+Once paired, starts automatically with: python3 relay_agent.py --relay wss://relay.example.com/relay
 """
 
 import argparse
@@ -342,7 +342,7 @@ class MobileRelayClient:
 
 def main():
     parser = argparse.ArgumentParser(description="Hermes mobile relay client")
-    parser.add_argument("--relay", default="wss://erc8004list.xyz/relay", help="Relay URL")
+    parser.add_argument("--relay", required=True, help="Relay URL, e.g. wss://relay.example.com/relay")
     # H2: prefer env vars over CLI args so tokens never appear in ps/history/systemd
     default_dash = os.environ.get("HERMES_DASHBOARD_WS", "")
     parser.add_argument("--dashboard", default=default_dash, help="Hermes Dashboard WS URL (or set HERMES_DASHBOARD_WS)")

@@ -4,8 +4,8 @@
 Routes encrypted bytes between paired Hermes Agent and Nexus App endpoints.
 Does NOT parse message content. Does NOT store messages.
 
-Deploy: run on jp-lighthouse behind Caddy reverse proxy.
-  Caddy: wss://erc8004list.xyz/relay → 127.0.0.1:9120
+Deploy: run on a public server behind a TLS-terminating reverse proxy.
+  Caddy: wss://relay.example.com/relay → 127.0.0.1:9120
 
 Protocol (all messages are JSON, sent as WebSocket text frames):
 

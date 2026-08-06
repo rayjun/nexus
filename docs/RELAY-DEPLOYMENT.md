@@ -42,11 +42,30 @@ iOS side (in the Nexus app):
 
 ### Prerequisites
 
-- A public server (e.g. jp-lighthouse) with a domain pointing at it
+- A public server with a domain pointing at it (A record). Throughout this
+  document `<relay.example.com>` is a placeholder — substitute your own
+  domain; no concrete domain is hardcoded anywhere in the repo.
 - Caddy installed (or any TLS terminator)
 - Python 3.11+ with `websockets`, `pynacl`, `cryptography`
 
-### Install
+### Quick install (deploy script)
+
+The repo ships `relay/deploy-relay.sh`, which installs the relay files,
+Python deps, a Caddy `/relay` route, and systemd services in one go:
+
+```bash
+# from the repo root
+bash relay/deploy-relay.sh install <relay.example.com>
+```
+
+It creates:
+
+- `~/nexus-relay/{relay_server.py,crypto.py,relay_agent.py}`
+- systemd unit `nexus-relay.service` (the public relay on `127.0.0.1:9120`)
+- systemd unit `nexus-relay-agent.service` (agent client; enable AFTER pairing)
+- a Caddy site block proxying `https://<relay.example.com>/relay` → `127.0.0.1:9120`
+
+### Manual install
 
 ```bash
 mkdir -p ~/nexus-relay
@@ -67,10 +86,9 @@ your-domain.com {
     handle /relay {
         reverse_proxy 127.0.0.1:9120
     }
-    # Optional: keep serving the Hermes Dashboard on the same domain
-    handle /api/* {
-        reverse_proxy 127.0.0.1:9119
-    }
+    # Security: do NOT proxy /api/* to the Dashboard here. The Nexus app
+    # reaches Hermes through the encrypted relay only, and exposing the
+    # tokenized Dashboard on the public internet is a leak vector.
 }
 ```
 
@@ -201,10 +219,13 @@ Then re-pair with a new code.
 
 ### iOS
 
-In `iosApp/iosApp/RelayClient.swift`:
+The relay URL is read from UserDefaults key `relay_url`. If unset, DEBUG
+builds default to `ws://127.0.0.1:9120` (simulator) and Release builds to
+`wss://relay.example.com/relay`. Point the app at your deployed relay:
 
-```swift
-let relayURL = "wss://your-domain.com/relay"
+```bash
+# on the device/simulator (or set relay_url in your app's settings)
+xcrun simctl spawn <UDID> defaults write com.rayjun.nexus relay_url -string "wss://your-domain.com/relay"
 ```
 
 - First launch shows the Pairing screen (6-digit code)
@@ -307,7 +328,67 @@ The agent forwards every method to the Hermes Dashboard WebSocket:
 
 ---
 
-## 7. Troubleshooting
+## 7. Upgrade
+
+Upgrading the relay stack (relay server, crypto, agent client) is
+non-disruptive for the agent (it reconnects automatically) and requires no
+re-pairing — E2E keys are persisted on both ends.
+
+### Option A — deploy script (recommended)
+
+```bash
+# from the repo root
+bash relay/deploy-relay.sh upgrade <relay.example.com> /path/to/nexus
+```
+
+This copies the three relay files from the given checkout, reloads Caddy if
+needed, and restarts `nexus-relay.service`. `nexus-relay-agent.service` is
+NOT auto-restarted by the script — restart it after you've confirmed the new
+agent files work:
+
+```bash
+sudo systemctl restart nexus-relay-agent.service
+```
+
+> The pairing state under `~/.hermes/mobile/` is untouched by upgrades, so
+> the phone stays paired.
+
+### Option B — manual
+
+```bash
+# 1. get latest files
+git -C /path/to/nexus pull --ff-only        # or clone fresh
+cp /path/to/nexus/relay/{relay_server.py,crypto.py,relay_agent.py} ~/nexus-relay/
+
+# 2. restart the relay daemon
+sudo systemctl restart nexus-relay.service
+
+# 3. verify
+sudo systemctl status nexus-relay.service --no-pager | head -5
+curl -s https://<relay.example.com>/relay | head -c 200
+
+# 4. restart the agent daemon (after verifying the relay)
+sudo systemctl restart nexus-relay-agent.service
+```
+
+### What upgrades do NOT change
+
+- The relay protocol (`join`/`data`/`paired`) — backwards compatible.
+- The E2E crypto — key derivation, nonce layout and channel-id scheme are
+  stable; re-pairing is NOT required across upgrades.
+- The app side — iOS/Android clients connect with the same pairing state.
+
+### Rollback
+
+```bash
+# restore the previous files (e.g. from git history), then:
+sudo systemctl restart nexus-relay.service
+sudo systemctl restart nexus-relay-agent.service
+```
+
+---
+
+## 8. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
