@@ -88,8 +88,8 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            if relay.isPaired && !relay.isConnected {
-                relay.connect()
+            if !relay.servers.isEmpty, let serverID = relay.activeServerID, !relay.isConnected {
+                relay.connect(serverID: serverID)
             }
         }
         .onChange(of: relay.isConnected) { connected in
@@ -202,7 +202,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.plain)
                     Button {
-                        relayUrlDraft = UserDefaults.standard.string(forKey: "relay_url") ?? relay.currentRelayURL
+                        relayUrlDraft = UserDefaults.standard.string(forKey: "relay_url") ?? relay.activeServer?.relayURL ?? ""
                         isShowingSettings = true
                     } label: {
                         Image(systemName: "gearshape")
@@ -882,7 +882,7 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
 
-                        Text("Current: \(relay.currentRelayURL)")
+                        Text("Current: \(relay.activeServer?.relayURL ?? "—")")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(NexusStyle.muted)
                     }
@@ -1845,7 +1845,9 @@ struct ContentView: View {
 
     private func connect() async {
         // C6: legacy direct-connection removed. RelayClient handles connectivity.
-        relay.connect()
+        if let serverID = relay.activeServerID {
+            relay.connect(serverID: serverID)
+        }
     }
 
     private func loadHomeViaWS() async {
@@ -2218,7 +2220,9 @@ struct ContentView: View {
         }
         UserDefaults.standard.set(trimmed, forKey: "relay_url")
         relay.disconnect()
-        relay.connect()
+        if let serverID = relay.activeServerID {
+            relay.connect(serverID: serverID)
+        }
         isShowingSettings = false
         toast = ToastMessage(text: "Relay updated, reconnecting…", kind: .success)
     }

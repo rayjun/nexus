@@ -14,6 +14,8 @@
 		A10000000000000000000004 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* KeychainHelper.swift */; };
 		A10000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* Assets.xcassets */; };
 A20000000000000000000002 /* E2ECrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* E2ECrypto.swift */; };
+		A20000000000000000000008 /* ServerConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* ServerConnection.swift */; };
+		A2000000000000000000000A /* ServerProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* ServerProfile.swift */; };
 A20000000000000000000004 /* RelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* RelayClient.swift */; };
 A20000000000000000000006 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* PairingView.swift */; };
 /* End PBXBuildFile section */
@@ -28,6 +30,8 @@ A20000000000000000000006 /* PairingView.swift in Sources */ = {isa = PBXBuildFil
 		A10000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 A20000000000000000000001 /* E2ECrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2ECrypto.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 /* ServerConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerConnection.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* ServerProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerProfile.swift; sourceTree = "<group>"; };
 A20000000000000000000003 /* RelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayClient.swift; sourceTree = "<group>"; };
 A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -59,6 +63,8 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 				A10000000000000000000013 /* MobileGatewayClient.swift */,
 				A10000000000000000000017 /* HermesWSClient.swift */,
 				A20000000000000000000001 /* E2ECrypto.swift */,
+				A20000000000000000000009 /* ServerProfile.swift */,
+				A20000000000000000000007 /* ServerConnection.swift */,
 				A20000000000000000000003 /* RelayClient.swift */,
 				A20000000000000000000005 /* PairingView.swift */,
 				A10000000000000000000015 /* KeychainHelper.swift */,
@@ -150,6 +156,8 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 				A10000000000000000000003 /* MobileGatewayClient.swift in Sources */,
 				A10000000000000000000006 /* HermesWSClient.swift in Sources */,
 				A20000000000000000000002 /* E2ECrypto.swift in Sources */,
+				A2000000000000000000000A /* ServerProfile.swift in Sources */,
+				A20000000000000000000008 /* ServerConnection.swift in Sources */,
 				A20000000000000000000004 /* RelayClient.swift in Sources */,
 				A20000000000000000000006 /* PairingView.swift in Sources */,
 				A10000000000000000000004 /* KeychainHelper.swift in Sources */,

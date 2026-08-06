@@ -93,6 +93,20 @@ class MobileRelayClient:
 
     async def pair_and_run(self, code: str):
         """Pair with a mobile app, then immediately enter communication loop."""
+        # Fresh pairing: wipe any previous pairing state so old keys/counters
+        # cannot mix with the new keypair (would cause decrypt failures).
+        for f in ("keypair", "enc_key", "paired_pubkey", "channel_id", "send_seq", "recv_seq"):
+            p = MOBILE_DIR / f
+            if p.exists():
+                p.unlink()
+        # Reset in-memory state too — stale keys from a previous run would
+        # otherwise be used to decrypt the app's pairing messages.
+        self.enc_key = None
+        self.send_key = None
+        self.recv_key = None
+        self.peer_pubkey = None
+        self.send_seq = 0
+        self.recv_seq = 0
         self.keypair = KeyPair()
         self.keypair.save(MOBILE_DIR / "keypair")
         self.channel_id = channel_id_from_pairing_code(code)
@@ -103,22 +117,39 @@ class MobileRelayClient:
         log.info("pairing code: %s — waiting for app...", code)
         log.info("channel: %s", self.channel_id)
 
-        # Wait for app to join
+        # Wait for app to join — retry if the relay drops us (e.g. the
+        # 5-minute pairing window expires and the channel is cleaned up).
         while True:
-            msg = json.loads(await self.ws.recv())
-            if msg.get("type") == "paired":
-                log.info("app connected, exchanging keys...")
-                break
+            try:
+                msg = json.loads(await self.ws.recv())
+                if msg.get("type") == "paired":
+                    log.info("app connected, exchanging keys...")
+                    break
+            except websockets.exceptions.ConnectionClosed as e:
+                log.warning("connection closed while waiting (%s) — rejoining in 3s", e)
+                await asyncio.sleep(3)
+                try:
+                    await self.connect()
+                except Exception as ce:
+                    log.warning("rejoin failed: %s", ce)
 
         # Send our public key
         await self._send_data(base64.b64encode(self.keypair.public_bytes).decode())
 
         # Receive app's public key
         while True:
-            msg = json.loads(await self.ws.recv())
-            if msg.get("type") == "data":
-                self.peer_pubkey = base64.b64decode(msg["payload"])
-                break
+            try:
+                msg = json.loads(await self.ws.recv())
+                if msg.get("type") == "data":
+                    self.peer_pubkey = base64.b64decode(msg["payload"])
+                    break
+            except websockets.exceptions.ConnectionClosed as e:
+                log.warning("connection closed while exchanging (%s) — rejoining in 3s", e)
+                await asyncio.sleep(3)
+                try:
+                    await self.connect()
+                except Exception as ce:
+                    log.warning("rejoin failed: %s", ce)
 
         # Compute shared secret and derive direction-separated keys
         shared = compute_shared_secret(self.keypair.private_bytes, self.peer_pubkey)

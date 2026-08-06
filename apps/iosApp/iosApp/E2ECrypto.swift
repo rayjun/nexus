@@ -20,13 +20,11 @@ enum E2ECrypto {
         guard let shared = try? priv.sharedSecretFromKeyAgreement(with: pub) else {
             return nil
         }
-        let derived = shared.hkdfDerivedSymmetricKey(
-            using: SHA256.self,
-            salt: hkdfSalt,
-            sharedInfo: hkdfInfo,
-            outputByteCount: keySize
-        )
-        return derived.withUnsafeBytes { Data($0) }
+        // IMPORTANT: return the RAW ECDH output, NOT an HKDF-derivation of it.
+        // The Python side (crypto.py) computes raw ECDH then derives directional
+        // keys with ONE HKDF pass (info="chachapoly-key-<dir>"). If we derived
+        // here too, the keys would be double-HKDF'd and never match the agent.
+        return shared.withUnsafeBytes { Data($0) }
     }
 
     /// Derive direction-separated ChaChaPoly keys from the ECDH shared secret.

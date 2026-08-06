@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from nacl.bindings import (
-    crypto_box_beforenm,
+    crypto_scalarmult,
     crypto_aead_chacha20poly1305_ietf_encrypt,
     crypto_aead_chacha20poly1305_ietf_decrypt,
     crypto_aead_chacha20poly1305_ietf_NPUBBYTES,
@@ -98,7 +98,13 @@ def derive_enc_key(shared_secret: bytes, direction: str = "") -> bytes:
 
 
 def compute_shared_secret(my_priv: bytes, peer_pub: bytes) -> bytes:
-    return crypto_box_beforenm(bytes(PublicKey(peer_pub)), bytes(PrivateKey(my_priv)))
+    """Raw X25519 shared secret (matches Swift CryptoKit sharedSecretFromKeyAgreement).
+
+    NOTE: use crypto_scalarmult (raw X25519), NOT crypto_box_beforenm —
+    libsodium's box precomputes X25519 + HSalsa20, which does NOT match the
+    raw X25519 output the iOS side derives keys from.
+    """
+    return crypto_scalarmult(bytes(PrivateKey(my_priv)), bytes(PublicKey(peer_pub)))
 
 
 def make_nonce(sequence: int, channel_id: str) -> bytes:

@@ -181,6 +181,12 @@ class RelayServer:
                     elif age > 86400:
                         stale.append(cid)
                 for cid in stale:
+                    ch = self.channels.get(cid)
+                    # Close any lingering sockets so clients reconnect & rejoin
+                    for sock in (ch.agent, ch.app):
+                        if sock is not None and sock.open:
+                            asyncio.create_task(sock.close(code=1000, reason="channel expired"))
+                        self._members.pop(sock, None)
                     del self.channels[cid]
                     log.info("channel %s cleaned up (age=%.0fs)", cid, age)
 

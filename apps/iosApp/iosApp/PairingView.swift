@@ -1,10 +1,12 @@
 import SwiftUI
 
 struct PairingView: View {
+    @State private var relayUrl = ""
     @State private var code = ""
+    @State private var serverName = ""
     @State private var isError = false
     @State private var errorMessage = ""
-    @State private var relayUrlDraft = ""
+    @State private var isAdding = false
     @ObservedObject private var relay = RelayClient.shared
 
     var body: some View {
@@ -16,28 +18,51 @@ struct PairingView: View {
                     .font(.system(size: 34, weight: .bold))
                     .foregroundColor(.primary)
 
-                Text("Enter the 6-digit pairing code")
+                Text("Add your Hermes server")
                     .font(.system(size: 15))
                     .foregroundColor(.secondary)
 
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.blue, lineWidth: 2)
-                        .frame(height: 52)
-
-                    TextField("", text: $code)
-                        .font(.system(size: 24, weight: .semibold, design: .monospaced))
-                        .multilineTextAlignment(.center)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
-                        .padding(.horizontal, 16)
-                        .onChange(of: code) { newValue in
-                            if newValue.count > 6 {
-                                code = String(newValue.prefix(6))
-                            }
-                        }
+                // Relay URL
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Relay URL")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    TextField("wss://relay.example.com/relay", text: $relayUrl)
+                        .font(.system(size: 15, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(.separator), lineWidth: 0.5))
                 }
-                .frame(width: 200)
+
+                // Server name (optional)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Server name (optional)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    TextField("My Agent", text: $serverName)
+                        .font(.system(size: 15))
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(.separator), lineWidth: 0.5))
+                }
+
+                // Pairing code
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Pairing code (from the agent)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    TextField("K7M2P9QX", text: $code)
+                        .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .multilineTextAlignment(.center)
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.blue.opacity(0.6), lineWidth: 1.5))
+                }
 
                 if isError {
                     Text(errorMessage)
@@ -46,123 +71,66 @@ struct PairingView: View {
                 }
 
                 Button(action: startPairing) {
-                    Text("Pair")
+                    Text(isAdding ? "Adding…" : "Add Server")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
-                        .frame(width: 140, height: 42)
-                        .background(code.count == 6 ? Color.blue : Color.gray.opacity(0.3))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(canAdd ? Color.blue : Color.gray.opacity(0.3))
                         .cornerRadius(12)
                 }
-                .disabled(code.count != 6 || isConnecting)
+                .disabled(!canAdd || isAdding)
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, 28)
 
-            if isConnecting {
-                VStack(spacing: 12) {
+            if isAdding {
+                VStack(spacing: 10) {
                     ProgressView()
                         .tint(Color.blue)
-                    Text(statusText)
+                    Text("Pairing with agent…")
                         .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 }
-                .padding(.top, 24)
+                .padding(.top, 20)
             }
-
-            // Relay server config — must be reachable BEFORE pairing, so it
-            // lives on the pairing screen, not hidden in Dashboard settings.
-            relayConfigCard
 
             Spacer()
         }
         .onAppear {
-            relayUrlDraft = UserDefaults.standard.string(forKey: "relay_url") ?? relay.currentRelayURL
-        }
-    }
-
-    private var relayConfigCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 14))
-                    .foregroundColor(.blue)
-                Text("Relay Server")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.primary)
-                Spacer()
-                Text("Current: \(relay.currentRelayURL)")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.secondary)
+            if relayUrl.isEmpty {
+                relayUrl = UserDefaults.standard.string(forKey: "relay_url")
+                    ?? (Bundle.main.object(forInfoDictionaryKey: "NexusRelayURL") as? String)
+                    ?? "wss://relay.example.com/relay"
             }
-
-            TextField("wss://your-relay-domain/relay", text: $relayUrlDraft)
-                .font(.system(size: 14, design: .monospaced))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .padding(10)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color(.separator), lineWidth: 0.5))
-
-            Button(action: saveRelayUrl) {
-                Text("Save & Reconnect")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 40)
-                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(.separator), lineWidth: 0.5))
-        .padding(.horizontal, 24)
-        .padding(.top, 28)
-    }
-
-    private func saveRelayUrl() {
-        let trimmed = relayUrlDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let url = URL(string: trimmed),
-              url.scheme == "wss" || url.scheme == "ws" else {
-            isError = true
-            errorMessage = "Enter a valid wss:// relay URL"
-            return
-        }
-        UserDefaults.standard.set(trimmed, forKey: "relay_url")
-        relay.disconnect()
-        relay.connect()
-    }
-
-    private var isConnecting: Bool {
-        switch relay.pairingState {
-        case .connecting, .waitingForAgent, .exchangingKeys:
-            return true
-        default:
-            return false
         }
     }
 
-    private var statusText: String {
-        switch relay.pairingState {
-        case .connecting:
-            return "Connecting to relay..."
-        case .waitingForAgent:
-            return "Waiting for agent..."
-        case .exchangingKeys:
-            return "Exchanging keys..."
-        case .paired:
-            return "Paired!"
-        case .error(let msg):
-            isError = true
-            errorMessage = msg
-            return msg
-        case .idle:
-            return ""
-        }
+    private var canAdd: Bool {
+        let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !relayUrl.isEmpty && trimmedCode.count >= 8
     }
 
     private func startPairing() {
         isError = false
-        relay.pair(withCode: code)
+        let trimmedRelay = relayUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard let url = URL(string: trimmedRelay), url.scheme == "wss" || url.scheme == "ws" else {
+            isError = true
+            errorMessage = "Enter a valid wss:// relay URL"
+            return
+        }
+        guard trimmedCode.count >= 8, trimmedCode.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
+            isError = true
+            errorMessage = "Enter the 8-character pairing code from the agent"
+            return
+        }
+        isAdding = true
+        UserDefaults.standard.set(trimmedRelay, forKey: "relay_url")
+        let displayName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
+        relay.addServer(relayURL: trimmedRelay, name: displayName.isEmpty ? nil : displayName, code: trimmedCode)
+        // The server list view takes over once paired; watch for the paired notification.
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("RelayPaired"), object: nil, queue: .main) { _ in
+            self.isAdding = false
+        }
     }
 }

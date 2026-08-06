@@ -6,11 +6,11 @@ struct NexusApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if relay.isPaired {
-                ContentView()
+            if relay.servers.isEmpty {
+                PairingView()
                     .environmentObject(relay)
             } else {
-                PairingView()
+                ContentView()
                     .environmentObject(relay)
             }
         }
