@@ -33,6 +33,9 @@ final class RelayClient: NSObject, ObservableObject {
     private var keyPairPriv: Data = Data()
     private var keyPairPub: Data = Data()
 
+    /// The resolved relay URL (UserDefaults override, else platform default).
+    var currentRelayURL: String { relayURL }
+
     /// C4: relay URL is configurable via UserDefaults (`relay_url`); DEBUG
     /// builds fall back to the local relay for simulator testing. Set
     /// `relay_url` to your deployed relay (e.g. wss://relay.example.com/relay).

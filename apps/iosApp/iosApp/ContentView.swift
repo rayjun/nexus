@@ -56,6 +56,7 @@ struct ContentView: View {
     @State private var toast: ToastMessage?
     @State private var searchText = ""
     @State private var isShowingSettings = false
+    @State private var relayUrlDraft = ""
     @FocusState private var inputFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var relay: RelayClient
@@ -201,6 +202,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.plain)
                     Button {
+                        relayUrlDraft = UserDefaults.standard.string(forKey: "relay_url") ?? relay.currentRelayURL
                         isShowingSettings = true
                     } label: {
                         Image(systemName: "gearshape")
@@ -846,23 +848,47 @@ struct ContentView: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
-                            Image(systemName: "server.rack")
+                            Image(systemName: "arrow.triangle.2.circlepath")
                                 .font(.system(size: 20))
                                 .foregroundStyle(NexusStyle.blue)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Gateway")
+                                Text("Relay Server")
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(NexusStyle.text)
-                                Text(gatewayBaseUrl)
+                                Text("wss://your-relay-domain/relay")
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundStyle(NexusStyle.muted)
                             }
                             Spacer()
                         }
-                        .padding(12)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+
+                        TextField("wss://your-relay-domain/relay", text: $relayUrlDraft)
+                            .font(.system(size: 14, design: .monospaced))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(10)
+                            .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+
+                        Button {
+                            saveRelayUrl()
+                        } label: {
+                            Text("Save & Reconnect")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 40)
+                                .background(NexusStyle.blue, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+
+                        Text("Current: \(relay.currentRelayURL)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(NexusStyle.muted)
                     }
+                    .padding(12)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
 
                     Spacer()
 
@@ -2182,6 +2208,19 @@ struct ContentView: View {
         agents = []
         nodeName = ""
         statusMessage = "Disconnected"
+    }
+
+    private func saveRelayUrl() {
+        let trimmed = relayUrlDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed), url.scheme == "wss" || url.scheme == "ws" else {
+            toast = ToastMessage(text: "Enter a valid wss:// relay URL", kind: .error)
+            return
+        }
+        UserDefaults.standard.set(trimmed, forKey: "relay_url")
+        relay.disconnect()
+        relay.connect()
+        isShowingSettings = false
+        toast = ToastMessage(text: "Relay updated, reconnecting…", kind: .success)
     }
 }
 
