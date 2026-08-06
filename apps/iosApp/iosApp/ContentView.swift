@@ -227,7 +227,7 @@ struct ContentView: View {
                     Circle()
                         .fill(NexusStyle.blue)
                         .frame(width: 7, height: 7)
-                    Text("\(agents.filter { $0.status == "online" }.count) of \(agents.count) servers online")
+                    Text("\(relay.servers.filter { $0.isOnline }.count) of \(relay.servers.count) servers online")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(NexusStyle.muted)
                 }
@@ -235,7 +235,7 @@ struct ContentView: View {
                 if isLoadingAgents {
                     loadingRows
                         .padding(.horizontal, 2)
-                } else if agents.isEmpty {
+                } else if relay.servers.isEmpty {
                     VStack(alignment: .center, spacing: 14) {
                         Image(systemName: "server.rack")
                             .font(.system(size: 40))
@@ -263,8 +263,8 @@ struct ContentView: View {
                     .padding(.vertical, 40)
                 } else {
                     LazyVStack(spacing: 14) {
-                        ForEach(agents) { agent in
-                            agentServerCard(agent)
+                        ForEach(relay.servers) { server in
+                            serverCard(server)
                         }
                     }
                 }
@@ -517,6 +517,72 @@ struct ContentView: View {
             }
             .cardStyle()
         }
+    }
+
+    private func serverCard(_ server: ServerProfile) -> some View {
+        let isActive = server.id == relay.activeServerID
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                relay.setActive(serverID: server.id)
+                selectedAgentServer = nil
+            } label: {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(server.isOnline ? NexusStyle.blue.opacity(0.12) : NexusStyle.line.opacity(0.5))
+                            .frame(width: 48, height: 48)
+                        Image(systemName: "server.rack")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(server.isOnline ? NexusStyle.blue : NexusStyle.subtleText)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(server.name)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(NexusStyle.text)
+                        Text(server.relayURL)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(NexusStyle.muted)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    if isActive {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(NexusStyle.blue)
+                    }
+                }
+                .padding(16)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 12) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(server.isOnline ? NexusStyle.blue : NexusStyle.subtleText)
+                        .frame(width: 6, height: 6)
+                    Text(server.isOnline ? "Online" : "Offline")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(server.isOnline ? NexusStyle.blue : NexusStyle.subtleText)
+                }
+                Spacer()
+                Button {
+                    relay.removeServer(serverID: server.id)
+                } label: {
+                    Image(systemName: "minus.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.red.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
+        }
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(isActive ? NexusStyle.blue.opacity(0.5) : NexusStyle.border, lineWidth: isActive ? 1.5 : 1)
+        )
     }
 
     private func agentServerCard(_ agent: AgentInfo) -> some View {
@@ -1923,21 +1989,6 @@ struct ContentView: View {
                 self.cronJobs = newCronJobs
                 self.persistentAgents = newPersistentAgents
                 self.approvalList = []
-
-                if agents.isEmpty && !newSessions.isEmpty {
-                    let defaultServer = AgentInfo(
-                        id: "relay",
-                        name: "Hermes Agent",
-                        baseUrl: "relay",
-                        status: "online",
-                        profile: "default",
-                        model: "",
-                        createdAt: "",
-                        lastSeenAt: nil
-                    )
-                    self.agents = [defaultServer]
-                    self.selectedAgentServer = defaultServer
-                }
 
                 self.isLoadingSessions = false
                 self.isLoadingCron = false
