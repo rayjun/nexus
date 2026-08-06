@@ -63,12 +63,22 @@ class KeyPair:
         os.chmod(path, 0o600)
 
 
-def derive_enc_key(shared_secret: bytes) -> bytes:
+def derive_enc_key(shared_secret: bytes, direction: str = "") -> bytes:
+    """Derive a ChaChaPoly key from the ECDH shared secret.
+
+    `direction` must be distinct per sender: "agent_to_app" or "app_to_agent".
+    Without direction separation, both sides derive the same key and both
+    counters start at 0 — the first message in each direction would reuse
+    key+nonce (ChaCha20 keystream reuse breaks E2E entirely).
+    """
+    info = HKDF_INFO
+    if direction:
+        info = HKDF_INFO + b"-" + direction.encode("utf-8")
     kdf = HKDF(
         algorithm=hashes.SHA256(),
         length=KEY_SIZE,
         salt=HKDF_SALT,
-        info=HKDF_INFO,
+        info=info,
     )
     return kdf.derive(shared_secret)
 
@@ -96,6 +106,16 @@ def decrypt(wire_payload: str, key: bytes) -> bytes:
     nonce = raw[:NONCE_SIZE]
     ciphertext = raw[NONCE_SIZE:]
     return crypto_aead_chacha20poly1305_ietf_decrypt(ciphertext, None, nonce, key)
+
+
+def decrypt_with_seq(wire_payload: str, key: bytes) -> tuple[int, bytes]:
+    """Decrypt and return (sequence, plaintext) for replay validation."""
+    raw = base64.b64decode(wire_payload)
+    nonce = raw[:NONCE_SIZE]
+    seq = struct.unpack(">I", nonce[:4])[0]
+    ciphertext = raw[NONCE_SIZE:]
+    plaintext = crypto_aead_chacha20poly1305_ietf_decrypt(ciphertext, None, nonce, key)
+    return seq, plaintext
 
 
 def encrypt_jsonrpc(rpc: dict, key: bytes, sequence: int, channel_id: str) -> str:

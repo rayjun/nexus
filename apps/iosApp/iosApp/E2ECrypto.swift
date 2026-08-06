@@ -29,6 +29,29 @@ enum E2ECrypto {
         return derived.withUnsafeBytes { Data($0) }
     }
 
+    /// Derive direction-separated ChaChaPoly keys from the ECDH shared secret.
+    /// Direction separation is REQUIRED: without it both sides derive the same
+    /// key and both counters start at 0 — the first message in each direction
+    /// would reuse key+nonce, breaking ChaCha20 (keystream reuse).
+    static func deriveDirectionalKeys(sharedSecret: Data) -> (agentToApp: Data, appToAgent: Data)? {
+        guard sharedSecret.count == keySize else { return nil }
+        let sym = SymmetricKey(data: sharedSecret)
+
+        func derive(_ info: String) -> Data? {
+            guard let infoData = ("chachapoly-key-" + info).data(using: .utf8) else { return nil }
+            let derived = HKDF<SHA256>.deriveKey(
+                inputKeyMaterial: sym,
+                salt: hkdfSalt,
+                info: infoData,
+                outputByteCount: keySize
+            )
+            return derived.withUnsafeBytes { Data($0) }
+        }
+
+        guard let a2a = derive("agent_to_app"), let a2ag = derive("app_to_agent") else { return nil }
+        return (a2a, a2ag)
+    }
+
     static func encrypt(plaintext: Data, key: Data, sequence: UInt32, channelId: String) -> String? {
         guard key.count == keySize else { return nil }
         let symKey = SymmetricKey(data: key)
@@ -68,6 +91,16 @@ enum E2ECrypto {
     static func decryptJSON(_ wirePayload: String, key: Data) -> [String: Any]? {
         guard let data = decrypt(wirePayload: wirePayload, key: key) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    /// Decrypt and extract the sequence from the nonce for replay validation.
+    static func decryptJSONWithSeq(_ wirePayload: String, key: Data) -> (seq: UInt32, json: [String: Any])? {
+        guard let raw = Data(base64Encoded: wirePayload), raw.count >= nonceSize + 16 else { return nil }
+        let seqBytes = raw.prefix(4)
+        let seq = seqBytes.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.bigEndian
+        guard let data = decrypt(wirePayload: wirePayload, key: key) else { return nil }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (seq, json)
     }
 
     static func channelIdFromPairingCode(_ code: String) -> String {

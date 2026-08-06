@@ -60,6 +60,7 @@ class RelayServer:
     def __init__(self) -> None:
         self.channels: dict[str, Channel] = {}
         self._lock = asyncio.Lock()
+        self._members: dict[object, str] = {}  # ws -> channel_id membership
 
     async def join(self, ws, channel_id: str, role: str) -> bool:
         async with self._lock:
@@ -81,6 +82,9 @@ class RelayServer:
             else:
                 return False
 
+            # C3: register membership — only joined sockets may forward to this channel
+            self._members[ws] = channel_id
+
             log.info("join: channel=%s role=%s both=%s", channel_id, role, ch.both_connected)
 
             if ch.both_connected:
@@ -99,6 +103,10 @@ class RelayServer:
         log.info("paired: channel=%s", ch.channel_id)
 
     async def forward(self, ws, channel_id: str, payload: str) -> None:
+        # C3: reject data from sockets that never joined this channel
+        if self._members.get(ws) != channel_id:
+            await ws.send(json.dumps({"type": "error", "message": "not joined"}))
+            return
         ch = self.channels.get(channel_id)
         if ch is None:
             await ws.send(json.dumps({"type": "error", "message": "unknown channel"}))
@@ -135,6 +143,8 @@ class RelayServer:
             if ch.agent is None and ch.app is None:
                 del self.channels[channel_id]
                 log.info("channel %s removed (empty)", channel_id)
+            # C3: clear membership for this socket
+            self._members.pop(ws, None)
 
     async def cleanup(self) -> None:
         while True:
@@ -195,6 +205,9 @@ class RelayServer:
         finally:
             if joined_channel:
                 await self.remove(ws, joined_channel)
+            else:
+                # Never joined a channel (or joined multiple) — still clear membership
+                self._members.pop(ws, None)
             log.info("disconnect from %s channel=%s", peer, joined_channel)
 
 

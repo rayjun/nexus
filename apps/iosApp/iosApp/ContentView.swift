@@ -5,7 +5,6 @@ struct ContentView: View {
     @AppStorage("gateway_base_url") private var gatewayBaseUrl = ""
     @State private var deviceId = KeychainHelper.load(key: "device_id")
     @State private var deviceToken = KeychainHelper.load(key: "device_token")
-    @State private var gatewayInput = ""
     @State private var deviceName = UIDevice.current.name
     @State private var statusMessage = ""
     @State private var nodeName = ""
@@ -13,7 +12,6 @@ struct ContentView: View {
     @State private var sessions: [SessionSummary] = []
     @State private var selectedAgentServer: AgentInfo?
     @State private var selectedSection = "Inbox"
-    @State private var isConnecting = false
     @State private var isLoadingAgents = false
     @State private var isLoadingSessions = false
     @State private var isShowingComposer = false
@@ -56,14 +54,14 @@ struct ContentView: View {
     @State private var isLoadingApprovals = false
     @State private var isLoadingArtifacts = false
     @State private var toast: ToastMessage?
-    @State private var apiKeyInput = ""
     @State private var searchText = ""
     @State private var isShowingSettings = false
     @FocusState private var inputFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var relay: RelayClient
 
     private var isConnected: Bool {
-        RelayClient.shared.isConnected
+        relay.isConnected
     }
 
     var body: some View {
@@ -89,14 +87,18 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            if RelayClient.shared.isPaired && !RelayClient.shared.isConnected {
-                RelayClient.shared.connect()
+            if relay.isPaired && !relay.isConnected {
+                relay.connect()
             }
         }
-        .onChange(of: RelayClient.shared.isConnected) { connected in
+        .onChange(of: relay.isConnected) { connected in
             if connected && agents.isEmpty {
                 Task { await loadHomeViaWS() }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RelayPaired"))) { _ in
+            // Peer confirmed present in channel — (re)load home data.
+            Task { await loadHomeViaWS() }
         }
         .sheet(isPresented: $isShowingComposer) {
             goalComposer
@@ -123,59 +125,19 @@ struct ContentView: View {
     }
 
     private var connectView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                mobileTopBar(title: "Nexus", subtitle: "Agent Control Surface")
-
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 10) {
-                        iconTile("bolt.horizontal.circle.fill")
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Connect to Hermes")
-                                .font(.system(size: 22, weight: .semibold))
-                                .foregroundStyle(NexusStyle.text)
-                            Text("Connect to your Hermes gateway via WebSocket.")
-                                .font(.system(size: 14))
-                                .foregroundStyle(NexusStyle.muted)
-                        }
-                    }
-
-                    VStack(spacing: 10) {
-                        desktopField(title: "GATEWAY", text: $gatewayInput, placeholder: "https://your-server:8444", systemImage: "network")
-                        desktopField(title: "API KEY", text: $apiKeyInput, placeholder: "Your Hermes API key", systemImage: "key.fill")
-                    }
-
-                    Button {
-                        Task { await connect() }
-                    } label: {
-                        HStack {
-                            if isConnecting {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: "arrow.right.circle.fill")
-                            }
-                            Text(isConnecting ? "Connecting" : "Connect and Enter")
-                                .font(.system(size: 15, weight: .semibold))
-                            Spacer()
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .frame(height: 48)
-                        .background(NexusStyle.blue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    .disabled(isConnecting || normalized(gatewayInput).isEmpty)
-
-                    if !statusMessage.isEmpty {
-                        statusPill(text: statusMessage, positive: statusMessage.hasPrefix("Connected"))
-                    }
-                }
-                .cardStyle()
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
-            .padding(.bottom, 24)
+        // C6: legacy direct-connection UI removed. When the relay is not yet
+        // connected we show a lightweight connecting state.
+        VStack(spacing: 16) {
+            mobileTopBar(title: "Nexus", subtitle: "Agent Control Surface")
+            Spacer()
+            ProgressView()
+                .tint(NexusStyle.blue)
+            Text("Connecting to relay…")
+                .font(.system(size: 14))
+                .foregroundStyle(NexusStyle.muted)
+            Spacer()
         }
+        .padding(.horizontal, 18)
     }
 
     @ViewBuilder
@@ -1766,8 +1728,8 @@ struct ContentView: View {
     private func resolveApproval(id: String, approve: Bool) async {
         resolvingApprovalId = id
         do {
-            guard RelayClient.shared.isConnected else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
-            _ = try await RelayClient.shared.call("approval.respond", params: ["session_id": id, "decision": approve ? "approve" : "deny"])
+            guard relay.isConnected else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            _ = try await relay.call("approval.respond", params: ["session_id": id, "decision": approve ? "approve" : "deny"])
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             approvalList.removeAll { $0.id == id }
             toast = ToastMessage(text: approve ? "Approved" : "Denied", kind: .success)
@@ -1856,84 +1818,18 @@ struct ContentView: View {
     }
 
     private func connect() async {
-        isConnecting = true
-        statusMessage = "Connecting..."
-        do {
-            let url = normalized(gatewayInput)
-            guard !url.isEmpty else {
-                statusMessage = "Please enter a gateway URL"
-                isConnecting = false
-                return
-            }
-            guard url.hasPrefix("http://") || url.hasPrefix("https://") else {
-                statusMessage = "URL must start with http:// or https://"
-                isConnecting = false
-                return
-            }
-            guard URL(string: url) != nil else {
-                statusMessage = "Invalid URL format"
-                isConnecting = false
-                return
-            }
-            let token = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !token.isEmpty else {
-                statusMessage = "No auth token. Enter your Hermes API key."
-                isConnecting = false
-                return
-            }
-            print("[Nexus] connect: url=\(url) token=\(token.prefix(5))...")
-            let client = HermesWSClient(baseURL: url)
-            try await client.connect(token: token)
-            print("[Nexus] connect: WS connected, loading home...")
-            
-            gatewayBaseUrl = url
-            deviceToken = token
-            KeychainHelper.save(token, key: "device_token")
-            nodeName = url.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "http://", with: "")
-            statusMessage = "Connected"
-
-            let server = AgentInfo(
-                id: "hermes-ws",
-                name: nodeName.isEmpty ? "Hermes Gateway" : nodeName,
-                baseUrl: url,
-                status: "online",
-                profile: "default",
-                model: "default",
-                createdAt: String(Int(Date().timeIntervalSince1970)),
-                lastSeenAt: nil
-            )
-            agents = [server]
-            selectedAgentServer = server
-            print("[Nexus] connect: calling loadHomeViaWS...")
-            await loadHomeViaWS()
-            print("[Nexus] connect: loadHomeViaWS done, sessions=\(sessions.count) cron=\(cronJobs.count)")
-        } catch let error as URLError {
-            print("[Nexus] connect URLError: \(error.code)")
-            switch error.code {
-            case .cannotFindHost, .cannotConnectToHost:
-                statusMessage = "Cannot reach gateway. Check URL and network."
-            case .timedOut:
-                statusMessage = "Connection timed out."
-            case .notConnectedToInternet:
-                statusMessage = "No internet connection."
-            default:
-                statusMessage = "Network error: \(error.localizedDescription)"
-            }
-        } catch {
-            print("[Nexus] connect error: \(error)")
-            statusMessage = error.localizedDescription
-        }
-        isConnecting = false
+        // C6: legacy direct-connection removed. RelayClient handles connectivity.
+        relay.connect()
     }
 
     private func loadHomeViaWS() async {
-        guard RelayClient.shared.isConnected else { return }
+        guard relay.isConnected else { return }
         isLoadingSessions = true
         isLoadingCron = true
         isLoadingApprovals = true
         isLoadingPersistentAgents = true
         do {
-            let sessionsResult = try await RelayClient.shared.call("session.list", params: ["limit": 50])
+            let sessionsResult = try await relay.call("session.list", params: ["limit": 50])
             var newSessions: [SessionSummary] = []
             if let sessionsArray = (sessionsResult as? [String: Any])?["sessions"] as? [[String: Any]] {
                 newSessions = sessionsArray.compactMap { dict in
@@ -1956,7 +1852,7 @@ struct ContentView: View {
             }
 
             // Load cron jobs
-            let cronResult = try await RelayClient.shared.call("cron.manage", params: ["action": "list"])
+            let cronResult = try await relay.call("cron.manage", params: ["action": "list"])
             var newCronJobs: [CronJobInfo] = []
             let cronJobsRaw: [[String: Any]]
             if let result = cronResult as? [String: Any], let jobs = result["jobs"] as? [[String: Any]] {
@@ -2057,13 +1953,13 @@ struct ContentView: View {
     }
 
     private func sessionMessages(for sourceSessionId: String) async throws -> (activeSessionId: String, messages: [[String: Any]]) {
-        guard RelayClient.shared.isConnected else {
+        guard relay.isConnected else {
             throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"])
         }
 
         if let activeSessionId = await MainActor.run(body: { resumedSessionIds[sourceSessionId] }) {
             do {
-                let result = try await RelayClient.shared.call("session.history", params: ["session_id": activeSessionId])
+                let result = try await relay.call("session.history", params: ["session_id": activeSessionId])
                 if let resultDict = result as? [String: Any], let messages = resultDict["messages"] as? [[String: Any]] {
                     return (activeSessionId, messages)
                 }
@@ -2072,7 +1968,7 @@ struct ContentView: View {
             }
         }
 
-        let result = try await RelayClient.shared.call("session.resume", params: ["session_id": sourceSessionId, "cols": 80])
+        let result = try await relay.call("session.resume", params: ["session_id": sourceSessionId, "cols": 80])
         guard let resultDict = result as? [String: Any] else {
             throw NSError(domain: "Nexus", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid session response"])
         }
@@ -2133,9 +2029,9 @@ struct ContentView: View {
         agentMessages.append(localUserMsg)
 
         do {
-            guard RelayClient.shared.isConnected else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            guard relay.isConnected else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
             let session = try await sessionMessages(for: agent.id)
-            _ = try await RelayClient.shared.call("prompt.submit", params: ["session_id": session.activeSessionId, "text": text])
+            _ = try await relay.call("prompt.submit", params: ["session_id": session.activeSessionId, "text": text])
             await loadAgentMessages(agent)
         } catch {
             agentInputDraft = text
@@ -2207,9 +2103,9 @@ struct ContentView: View {
         guard !goal.isEmpty else { return }
         isCreatingSession = true
         do {
-            guard RelayClient.shared.isConnected else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
-            _ = try await RelayClient.shared.call("session.create", params: [:])
-            _ = try await RelayClient.shared.call("prompt.submit", params: ["session_id": "new", "text": goal])
+            guard relay.isConnected else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            _ = try await relay.call("session.create", params: [:])
+            _ = try await relay.call("prompt.submit", params: ["session_id": "new", "text": goal])
             await loadHomeViaWS()
             selectedSection = "Sessions"
             toast = ToastMessage(text: "Session started", kind: .success)
@@ -2255,9 +2151,9 @@ struct ContentView: View {
         isAppendingGoal = true
         timelineError = ""
         do {
-            guard RelayClient.shared.isConnected else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
+            guard relay.isConnected else { throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not connected"]) }
             let sessionState = try await sessionMessages(for: session.id)
-            _ = try await RelayClient.shared.call("prompt.submit", params: ["session_id": sessionState.activeSessionId, "text": text])
+            _ = try await relay.call("prompt.submit", params: ["session_id": sessionState.activeSessionId, "text": text])
             await loadTimeline(for: session)
             followUpDraft = ""
         } catch {
@@ -2281,7 +2177,7 @@ struct ContentView: View {
         resumedSessionIds = [:]
         agentMessages = []
         selectedTimeline = nil
-        RelayClient.shared.disconnect()
+        relay.disconnect()
         
         agents = []
         nodeName = ""

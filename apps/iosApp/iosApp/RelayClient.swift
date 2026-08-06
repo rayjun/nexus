@@ -25,13 +25,27 @@ final class RelayClient: NSObject, ObservableObject {
     private let delegate = RelayWebSocketDelegate()
 
     private var channelID: String = ""
-    private var encKey: Data = Data()
+    private var encKey: Data = Data()      // shared secret (persisted)
+    private var sendKey: Data = Data()     // app_to_agent (encrypt)
+    private var recvKey: Data = Data()     // agent_to_app (decrypt)
     private var sendSeq: UInt32 = 0
     private var recvSeq: UInt32 = 0
     private var keyPairPriv: Data = Data()
     private var keyPairPub: Data = Data()
 
-    let relayURL = "ws://127.0.0.1:9120"
+    /// C4: relay URL is configurable via UserDefaults; production default is
+    /// the public relay. DEBUG builds fall back to the local relay for
+    /// simulator testing.
+    private var relayURL: String {
+        if let configured = UserDefaults.standard.string(forKey: "relay_url"), !configured.isEmpty {
+            return configured
+        }
+        #if DEBUG
+        return "ws://127.0.0.1:9120"
+        #else
+        return "wss://erc8004list.xyz/relay"
+        #endif
+    }
 
     override init() {
         super.init()
@@ -56,6 +70,10 @@ final class RelayClient: NSObject, ObservableObject {
         if !udKey.isEmpty && !udChId.isEmpty {
             encKey = Data(base64Encoded: udKey) ?? Data()
             channelID = udChId
+            if let keys = E2ECrypto.deriveDirectionalKeys(sharedSecret: encKey) {
+                sendKey = keys.appToAgent
+                recvKey = keys.agentToApp
+            }
             isPaired = true
             relayLog("loaded paired state from UserDefaults: channel=%@", udChId)
             return
@@ -67,9 +85,21 @@ final class RelayClient: NSObject, ObservableObject {
         if !key.isEmpty && !chId.isEmpty {
             encKey = Data(base64Encoded: key) ?? Data()
             channelID = chId
+            if let keys = E2ECrypto.deriveDirectionalKeys(sharedSecret: encKey) {
+                sendKey = keys.appToAgent
+                recvKey = keys.agentToApp
+            }
+            // C2: restore persisted counters so nonces never repeat across restarts
+            if let s = UInt32(KeychainHelper.load(key: "relay_send_seq")) { sendSeq = s }
+            if let r = UInt32(KeychainHelper.load(key: "relay_recv_seq")) { recvSeq = r }
             isPaired = true
-            relayLog("loaded paired state: channel=%@", chId)
+            relayLog("loaded paired state: channel=%@ seq=%d/%d", chId, sendSeq, recvSeq)
         }
+    }
+
+    private func persistCounters() {
+        KeychainHelper.save(String(sendSeq), key: "relay_send_seq")
+        KeychainHelper.save(String(recvSeq), key: "relay_recv_seq")
     }
 
     // MARK: - Connection
@@ -94,6 +124,11 @@ final class RelayClient: NSObject, ObservableObject {
 
     private func onConnected() {
         relayLog("relay connected")
+        // New connection = new session: reset counters so nonces restart at 0
+        // on both ends. Replay protection still works within the session.
+        sendSeq = 0
+        recvSeq = 0
+        persistCounters()
         isConnected = true
         joinChannel()
     }
@@ -137,9 +172,17 @@ final class RelayClient: NSObject, ObservableObject {
     private func handlePaired() {
         relayLog("paired event from relay")
         if isPaired {
-            // Already paired — this is a reconnection, go straight to communication
+            // Already paired — relay confirms both endpoints are in the channel,
+            // so communication can start now.
             relayLog("reconnected, entering communication mode")
-            DispatchQueue.main.async { self.pairingState = .paired }
+            DispatchQueue.main.async {
+                self.pairingState = .paired
+                // Signal ContentView to (re)load home data once the peer is present
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("RelayPaired"),
+                    object: nil
+                )
+            }
         } else {
             // First-time pairing — wait for agent's public key
             DispatchQueue.main.async { self.pairingState = .waitingForAgent }
@@ -164,12 +207,21 @@ final class RelayClient: NSObject, ObservableObject {
             DispatchQueue.main.async { self.pairingState = .error("ECDH failed") }
             return
         }
+        guard let keys = E2ECrypto.deriveDirectionalKeys(sharedSecret: shared) else {
+            DispatchQueue.main.async { self.pairingState = .error("key derivation failed") }
+            return
+        }
 
         encKey = shared
+        sendKey = keys.appToAgent
+        recvKey = keys.agentToApp
+        sendSeq = 0
+        recvSeq = 0
 
         KeychainHelper.save(encKey.base64EncodedString(), key: "relay_enc_key")
         KeychainHelper.save(channelID, key: "relay_channel_id")
         KeychainHelper.save(keyPairPriv.base64EncodedString(), key: "relay_priv_key")
+        persistCounters()
 
         DispatchQueue.main.async { self.pairingState = .paired }
         isPaired = true
@@ -197,10 +249,13 @@ final class RelayClient: NSObject, ObservableObject {
                 handleEncryptedData(payload)
             } else if case .paired = pairingState {
                 // First-time pairing: first encrypted message is the paired confirmation
-                if let rpc = E2ECrypto.decryptJSON(payload, key: encKey) {
+                if let (seq, rpc) = E2ECrypto.decryptJSONWithSeq(payload, key: recvKey),
+                   seq == recvSeq {
                     if let params = rpc["params"] as? [String: Any],
                        params["type"] as? String == "paired" {
                         relayLog("pairing verified ✓")
+                        recvSeq += 1
+                        persistCounters()
                     }
                 }
             }
@@ -218,12 +273,19 @@ final class RelayClient: NSObject, ObservableObject {
     }
 
     private func handleEncryptedData(_ payload: String) {
-        guard let rpc = E2ECrypto.decryptJSON(payload, key: encKey) else {
+        guard let (seq, rpc) = E2ECrypto.decryptJSONWithSeq(payload, key: recvKey) else {
             relayLog("decrypt failed")
             return
         }
 
+        // H4: reject replays — incoming seq must equal expected recv_seq
+        guard seq == recvSeq else {
+            relayLog("replay/mismatch: got seq=%d expected=%d — dropping", Int(seq), Int(recvSeq))
+            return
+        }
+
         recvSeq += 1
+        persistCounters()
 
         let method = rpc["method"] as? String ?? ""
         let id = rpc["id"]
@@ -262,13 +324,22 @@ final class RelayClient: NSObject, ObservableObject {
             "params": params
         ]
 
-        guard let wire = E2ECrypto.encryptJSON(rpc, key: encKey, sequence: sendSeq, channelId: channelID) else {
+        // H6: allocate sendSeq under lock to avoid concurrent nonce reuse
+        let seq: UInt32 = {
+            pendingLock.lock()
+            defer { pendingLock.unlock() }
+            let s = sendSeq
+            sendSeq += 1
+            return s
+        }()
+        persistCounters()
+
+        guard let wire = E2ECrypto.encryptJSON(rpc, key: sendKey, sequence: seq, channelId: channelID) else {
             throw NSError(domain: "Nexus", code: 1, userInfo: [NSLocalizedDescriptionKey: "encrypt failed"])
         }
 
-        sendSeq += 1
         send(["type": "data", "channel": channelID, "payload": wire])
-        relayLog("rpc sent: method=%@ id=%d", method, id)
+        relayLog("rpc sent: method=%@ id=%d seq=%d", method, id, Int(seq))
 
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Any, Error>) in
             pendingLock.lock()

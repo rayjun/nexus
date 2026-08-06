@@ -22,7 +22,7 @@ import websockets
 sys.path.insert(0, str(Path(__file__).parent))
 from crypto import (
     KeyPair, compute_shared_secret, derive_enc_key,
-    encrypt_jsonrpc, decrypt_jsonrpc, channel_id_from_pairing_code,
+    encrypt_jsonrpc, decrypt_jsonrpc, decrypt_with_seq, channel_id_from_pairing_code,
     save_enc_key, load_enc_key, save_peer_pubkey, load_peer_pubkey,
     save_sequence, load_sequence, KeyPair as KP,
 )
@@ -39,8 +39,12 @@ class MobileRelayClient:
         self.dashboard_url = dashboard_url
         self.ws = None
         self.dash_ws = None
+        self._dash_pending: dict[str, asyncio.Future] = {}
+        self._dash_lock = asyncio.Lock()
         self.channel_id: str | None = None
         self.enc_key: bytes | None = None
+        self.send_key: bytes | None = None
+        self.recv_key: bytes | None = None
         self.send_seq = 0
         self.recv_seq = 0
         self.keypair: KeyPair | None = None
@@ -52,7 +56,11 @@ class MobileRelayClient:
 
     def load_state(self):
         if self.is_paired:
-            self.enc_key = load_enc_key(MOBILE_DIR / "enc_key")
+            shared = load_enc_key(MOBILE_DIR / "enc_key")
+            self.enc_key = shared
+            # Direction-separated keys: agent sends with agent_to_app, receives with app_to_agent
+            self.send_key = derive_enc_key(shared, "agent_to_app")
+            self.recv_key = derive_enc_key(shared, "app_to_agent")
             self.peer_pubkey = load_peer_pubkey(MOBILE_DIR / "paired_pubkey")
             self.keypair = KeyPair.load(MOBILE_DIR / "keypair")
             # Channel ID stored alongside enc_key
@@ -111,9 +119,11 @@ class MobileRelayClient:
                 self.peer_pubkey = base64.b64decode(msg["payload"])
                 break
 
-        # Compute shared secret and derive key
+        # Compute shared secret and derive direction-separated keys
         shared = compute_shared_secret(self.keypair.private_bytes, self.peer_pubkey)
-        self.enc_key = derive_enc_key(shared)
+        self.enc_key = shared
+        self.send_key = derive_enc_key(shared, "agent_to_app")
+        self.recv_key = derive_enc_key(shared, "app_to_agent")
 
         # Save state
         MOBILE_DIR.mkdir(parents=True, exist_ok=True)
@@ -125,7 +135,7 @@ class MobileRelayClient:
 
         # Send encrypted confirmation
         confirm = {"jsonrpc": "2.0", "method": "event", "params": {"type": "paired"}}
-        wire = encrypt_jsonrpc(confirm, self.enc_key, self.send_seq, self.channel_id)
+        wire = encrypt_jsonrpc(confirm, self.send_key, self.send_seq, self.channel_id)
         await self._send_data(wire)
         self.send_seq += 1
         save_sequence(MOBILE_DIR / "send_seq", self.send_seq)
@@ -147,6 +157,12 @@ class MobileRelayClient:
             try:
                 await self.connect()
                 log.info("reconnected to relay, joined channel %s", self.channel_id)
+                # New connection = new session: reset BOTH counters so nonce
+                # sequences align with the peer (which also restarts at 0).
+                self.recv_seq = 0
+                self.send_seq = 0
+                save_sequence(MOBILE_DIR / "recv_seq", 0)
+                save_sequence(MOBILE_DIR / "send_seq", 0)
             except Exception as e:
                 log.warning("reconnect failed: %s", e)
 
@@ -161,20 +177,31 @@ class MobileRelayClient:
 
             payload = msg.get("payload", "")
             try:
-                rpc = decrypt_jsonrpc(payload, self.enc_key)
+                seq, plaintext = decrypt_with_seq(payload, self.recv_key)
             except Exception:
                 log.warning("decrypt failed")
                 continue
 
+            # H4: reject replays — incoming seq must equal expected recv_seq
+            if seq != self.recv_seq:
+                log.warning("replay/mismatch: got seq=%d expected=%d — dropping", seq, self.recv_seq)
+                continue
+
             self.recv_seq += 1
             save_sequence(MOBILE_DIR / "recv_seq", self.recv_seq)
+
+            try:
+                rpc = json.loads(plaintext)
+            except json.JSONDecodeError:
+                log.warning("bad json after decrypt")
+                continue
 
             log.info("rpc: method=%s id=%s", rpc.get("method"), rpc.get("id"))
 
             response = await self.handle_rpc(rpc)
 
             if response:
-                wire = encrypt_jsonrpc(response, self.enc_key, self.send_seq, self.channel_id)
+                wire = encrypt_jsonrpc(response, self.send_key, self.send_seq, self.channel_id)
                 log.info("rpc response: id=%s len=%d", response.get("id"), len(wire))
                 await self._send_data(wire)
                 self.send_seq += 1
@@ -200,14 +227,30 @@ class MobileRelayClient:
                         paired = True
                         log.info("app connected")
 
+                # New connection = new session: reset receive counter so the
+                # peer's fresh sequence numbers (starting at 0) are accepted.
+                self.recv_seq = 0
+                self.send_seq = 0
+                save_sequence(MOBILE_DIR / "recv_seq", 0)
+                save_sequence(MOBILE_DIR / "send_seq", 0)
+
                 await self._message_loop()
 
             except websockets.exceptions.ConnectionClosed:
                 log.warning("connection closed, reconnecting in 3s...")
                 await asyncio.sleep(3)
+                # New connection = new session: reset both counters
+                self.recv_seq = 0
+                self.send_seq = 0
+                save_sequence(MOBILE_DIR / "recv_seq", 0)
+                save_sequence(MOBILE_DIR / "send_seq", 0)
             except Exception as e:
                 log.exception("error: %s", e)
                 await asyncio.sleep(3)
+                self.recv_seq = 0
+                self.send_seq = 0
+                save_sequence(MOBILE_DIR / "recv_seq", 0)
+                save_sequence(MOBILE_DIR / "send_seq", 0)
 
     async def handle_rpc(self, rpc: dict) -> dict | None:
         """Bridge JSON-RPC to Hermes Dashboard via WebSocket."""
@@ -221,10 +264,25 @@ class MobileRelayClient:
         if method == "event" and params.get("type") == "paired":
             return None
 
+        # H3: method allowlist — a phone is a low-trust device. Block methods
+        # that expose secrets or grant control beyond chat/approvals.
+        allowed = {
+            "session.list", "session.resume", "session.history", "session.status",
+            "session.interrupt", "prompt.submit", "approval.respond", "cron.manage",
+            "agents.list", "model.options", "tools.list", "toolsets.list",
+        }
+        if method not in allowed:
+            log.warning("blocked method: %s", method)
+            return {"jsonrpc": "2.0", "id": rid, "result": {"error": f"method not allowed: {method}"}}
+
         return await self.dashboard_call(method, params, rid)
 
     async def dashboard_call(self, method: str, params: dict, rid) -> dict:
-        """Forward a JSON-RPC call to the real Hermes Dashboard."""
+        """Forward a JSON-RPC call to the real Hermes Dashboard.
+
+        H5: a single background reader dispatches responses by id to pending
+        futures — concurrent calls never steal each other's responses.
+        """
         if self.dash_ws is None:
             try:
                 self.dash_ws = await websockets.connect(
@@ -233,31 +291,61 @@ class MobileRelayClient:
                 # Consume gateway.ready
                 await asyncio.wait_for(self.dash_ws.recv(), timeout=5)
                 log.info("connected to dashboard: %s", self.dashboard_url)
+                asyncio.create_task(self._dash_reader())
             except Exception as e:
                 log.warning("dashboard connect failed: %s", e)
                 self.dash_ws = None
                 return {"jsonrpc": "2.0", "id": rid,
                         "result": {"error": f"dashboard unavailable: {e}"}}
 
-        req = {"jsonrpc": "2.0", "id": "relay-" + str(rid), "method": method, "params": params}
+        dash_id = f"relay-{rid}"
+        fut = asyncio.get_event_loop().create_future()
+        async with self._dash_lock:
+            self._dash_pending[dash_id] = fut
+
+        req = {"jsonrpc": "2.0", "id": dash_id, "method": method, "params": params}
         try:
             await self.dash_ws.send(json.dumps(req))
-            while True:
-                raw = await asyncio.wait_for(self.dash_ws.recv(), timeout=30)
-                msg = json.loads(raw)
-                # Skip event pushes, find our response
-                if msg.get("id") == "relay-" + str(rid):
-                    return {"jsonrpc": "2.0", "id": rid, "result": msg.get("result", {})}
         except Exception as e:
-            log.warning("dashboard call failed: %s", e)
+            self._dash_pending.pop(dash_id, None)
             return {"jsonrpc": "2.0", "id": rid,
-                    "result": {"error": f"dashboard call failed: {e}"}}
+                    "result": {"error": f"dashboard send failed: {e}"}}
+
+        try:
+            result = await asyncio.wait_for(fut, timeout=30)
+            return {"jsonrpc": "2.0", "id": rid, "result": result}
+        except asyncio.TimeoutError:
+            self._dash_pending.pop(dash_id, None)
+            return {"jsonrpc": "2.0", "id": rid,
+                    "result": {"error": "dashboard timeout"}}
+
+    async def _dash_reader(self) -> None:
+        """Single reader: match responses by id, push events aside."""
+        try:
+            async for raw in self.dash_ws:
+                msg = json.loads(raw)
+                mid = msg.get("id")
+                if mid is not None and mid in self._dash_pending:
+                    fut = self._dash_pending.pop(mid)
+                    if not fut.done():
+                        fut.set_result(msg.get("result", {}))
+                # Events (no id) are intentionally ignored here; the mobile
+                # client polls, so live pushes are out of scope for now.
+        except Exception as e:
+            log.warning("dashboard reader ended: %s", e)
+            # Fail all pending on disconnect so callers don't hang
+            for fut in self._dash_pending.values():
+                if not fut.done():
+                    fut.set_exception(ConnectionError("dashboard disconnected"))
+            self._dash_pending.clear()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Hermes mobile relay client")
     parser.add_argument("--relay", default="wss://erc8004list.xyz/relay", help="Relay URL")
-    parser.add_argument("--dashboard", default="", help="Hermes Dashboard WS URL (e.g. ws://127.0.0.1:9119/api/ws?token=...)")
+    # H2: prefer env vars over CLI args so tokens never appear in ps/history/systemd
+    default_dash = os.environ.get("HERMES_DASHBOARD_WS", "")
+    parser.add_argument("--dashboard", default=default_dash, help="Hermes Dashboard WS URL (or set HERMES_DASHBOARD_WS)")
     parser.add_argument("--pair", action="store_true", help="Generate pairing code")
     parser.add_argument("--code", default=None, help="Use specific pairing code")
     args = parser.parse_args()
