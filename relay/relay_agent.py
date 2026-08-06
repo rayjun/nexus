@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -347,14 +348,24 @@ def main():
     default_dash = os.environ.get("HERMES_DASHBOARD_WS", "")
     parser.add_argument("--dashboard", default=default_dash, help="Hermes Dashboard WS URL (or set HERMES_DASHBOARD_WS)")
     parser.add_argument("--pair", action="store_true", help="Generate pairing code")
-    parser.add_argument("--code", default=None, help="Use specific pairing code")
+    parser.add_argument("--code", default=None, help="Use specific pairing code (8-char alphanumeric, e.g. K7mP2xQ9)")
     args = parser.parse_args()
 
     client = MobileRelayClient(args.relay, args.dashboard)
 
     if args.pair:
-        code = args.code or str(hash(os.urandom(4)) % 1000000).zfill(6)
-        print(f"\n  Pairing code: {code}\n  Enter this in Nexus app.\n")
+        # Security: 8-char alphanumeric code (32^8 ≈ 10^12 space) — a 6-digit
+        # numeric code (10^6) is brute-forceable: an attacker can precompute
+        # channel ids and race the real app to join the channel (MITM).
+        if args.code:
+            code = args.code.strip().upper()
+            if not (8 <= len(code) <= 12) or not code.replace("-", "").isalnum():
+                log.error("pairing code must be 8-12 alphanumeric chars (e.g. K7M2P9QX)")
+                return
+        else:
+            alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I/O/1/0 ambiguity
+            code = "".join(secrets.choice(alphabet) for _ in range(8))
+        print(f"\n  Pairing code: {code}\n  Enter this in Nexus app (Add Server).\n")
         asyncio.run(client.pair_and_run(code))
     else:
         asyncio.run(client.run())

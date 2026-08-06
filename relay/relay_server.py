@@ -42,6 +42,12 @@ RELAY_HOST = "127.0.0.1"
 RELAY_PORT = 9120
 HEARTBEAT_TIMEOUT = 90  # seconds without ping → drop
 CLEANUP_INTERVAL = 30  # seconds between cleanup sweeps
+# Security: pairing window — an unpaired channel lives at most this long,
+# after which it is garbage-collected (prevents indefinite brute-force races).
+PAIRING_WINDOW = 300  # 5 minutes
+# Security: per-IP join attempt rate limit (anti brute-force).
+JOIN_RATE_LIMIT = 5  # joins per IP per window
+JOIN_RATE_WINDOW = 60  # seconds
 
 
 @dataclass
@@ -61,6 +67,19 @@ class RelayServer:
         self.channels: dict[str, Channel] = {}
         self._lock = asyncio.Lock()
         self._members: dict[object, str] = {}  # ws -> channel_id membership
+        # Anti brute-force: (ip, channel_id) -> list of join timestamps
+        self._join_attempts: dict[tuple[str, str], list[float]] = {}
+
+    def _rate_limited(self, ip: str, channel_id: str) -> bool:
+        """True if this IP has exceeded the join rate limit for the channel."""
+        now = time.time()
+        key = (ip, channel_id)
+        attempts = [t for t in self._join_attempts.get(key, []) if now - t < JOIN_RATE_WINDOW]
+        self._join_attempts[key] = attempts
+        if len(attempts) >= JOIN_RATE_LIMIT:
+            return True
+        attempts.append(now)
+        return False
 
     async def join(self, ws, channel_id: str, role: str) -> bool:
         async with self._lock:
@@ -154,9 +173,12 @@ class RelayServer:
             async with self._lock:
                 for cid, ch in list(self.channels.items()):
                     age = now - ch.created_at
-                    if not ch.both_connected and age > 300:
-                        stale.append(cid)
-                    elif ch.both_connected and age > 86400:
+                    if not ch.both_connected:
+                        # Security: pairing window — unpaired channels expire
+                        # so a channel can't be squatted/brute-forced forever.
+                        if age > PAIRING_WINDOW:
+                            stale.append(cid)
+                    elif age > 86400:
                         stale.append(cid)
                 for cid in stale:
                     del self.channels[cid]
@@ -183,6 +205,12 @@ class RelayServer:
                     role = msg.get("role", "")
                     if not channel_id or role not in ("agent", "app"):
                         await ws.send(json.dumps({"type": "error", "message": "bad join"}))
+                        continue
+                    # Security: per-IP rate limit on join attempts (anti brute-force)
+                    ip = ws.remote_address[0] if ws.remote_address else "?"
+                    if self._rate_limited(ip, channel_id):
+                        log.warning("rate limited: %s join %s", ip, channel_id)
+                        await ws.send(json.dumps({"type": "error", "message": "rate limited"}))
                         continue
                     ok = await self.join(ws, channel_id, role)
                     if ok:

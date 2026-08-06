@@ -73,8 +73,9 @@ if [ -f "$STATE_DIR/enc_key" ] && [ -f "$STATE_DIR/paired_pubkey" ]; then
     PAIR_MODE=0
 else
     PAIR_MODE=1
-    # Generate a fresh 6-digit pairing code
-    PAIR_CODE="$(printf '%06d' $((RANDOM * RANDOM % 1000000)))"
+    # Security: 8-char alphanumeric code (32^8 ≈ 10^12) — 6-digit numeric is
+    # brute-forceable (channel ids are precomputable; attacker races the app).
+    PAIR_CODE="$(tr -dc 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' < /dev/urandom | head -c 8)"
     echo "NOT paired yet. Pairing code: $PAIR_CODE"
     echo ""
     echo ">>> In the Nexus app: enter $PAIR_CODE"
