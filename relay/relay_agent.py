@@ -84,6 +84,15 @@ class MobileRelayClient:
     async def _join(self, channel_id: str, role: str):
         msg = {"type": "join", "channel": channel_id, "role": role}
         await self.ws.send(json.dumps(msg))
+        # Wait for the join ack — a failed join (rate limited / slot taken /
+        # channel expired) would otherwise be silently treated as success and
+        # every data send would fail with "not joined".
+        try:
+            reply = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=5))
+        except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed) as e:
+            raise ConnectionError(f"join {channel_id} timed out: {e}") from e
+        if reply.get("type") == "error":
+            raise ConnectionError(f"join {channel_id} rejected: {reply.get('message')}")
 
     async def _send_data(self, payload: str):
         if not self.channel_id:
@@ -114,7 +123,7 @@ class MobileRelayClient:
         await self.connect()
         # connect() already joins when channel_id is set
 
-        log.info("pairing code: %s — waiting for app...", code)
+        log.info("pairing code: %s**** — waiting for app...", code[:2])
         log.info("channel: %s", self.channel_id)
 
         # Wait for app to join — retry if the relay drops us (e.g. the
@@ -151,8 +160,11 @@ class MobileRelayClient:
                 except Exception as ce:
                     log.warning("rejoin failed: %s", ce)
 
-        # Compute shared secret and derive direction-separated keys
-        shared = compute_shared_secret(self.keypair.private_bytes, self.peer_pubkey)
+        # Compute shared secret and derive direction-separated keys.
+        # PSK-blind with the pairing code so the key agreement is bound to
+        # knowledge of the code (defeats MITM by relay/on-path attackers).
+        psk = code.encode("utf-8")
+        shared = compute_shared_secret(self.keypair.private_bytes, self.peer_pubkey, psk=psk)
         self.enc_key = shared
         self.send_key = derive_enc_key(shared, "agent_to_app")
         self.recv_key = derive_enc_key(shared, "app_to_agent")
@@ -197,6 +209,49 @@ class MobileRelayClient:
                 save_sequence(MOBILE_DIR / "send_seq", 0)
             except Exception as e:
                 log.warning("reconnect failed: %s", e)
+
+    async def _rekey(self) -> None:
+        """Re-derive session keys on a new connection.
+
+        Generates a fresh ephemeral X25519 keypair, exchanges public keys
+        with the app (plaintext, like the initial pairing handshake), and
+        derives NEW directional keys. Guarantees a reconnect never reuses
+        the previous session's key+nonce space (ChaCha20 keystream reuse).
+        """
+        self.keypair = KeyPair()
+        # Send our fresh public key (plaintext — same as pairing handshake)
+        await self._send_data(base64.b64encode(self.keypair.public_bytes).decode())
+        log.info("rekey: sent fresh public key, waiting for app's...")
+
+        # Receive the app's fresh public key
+        while True:
+            try:
+                msg = json.loads(await self.ws.recv())
+            except websockets.exceptions.ConnectionClosed as e:
+                log.warning("rekey: connection closed (%s)", e)
+                raise
+            if msg.get("type") != "data":
+                continue
+            try:
+                pub = base64.b64decode(msg["payload"])
+                if len(pub) == 32:
+                    self.peer_pubkey = pub
+                    break
+            except Exception:
+                continue
+            # Encrypted data (old key) during rekey → ignore, keep waiting
+
+        shared = compute_shared_secret(self.keypair.private_bytes, self.peer_pubkey)
+        self.enc_key = shared
+        self.send_key = derive_enc_key(shared, "agent_to_app")
+        self.recv_key = derive_enc_key(shared, "app_to_agent")
+        self.send_seq = 0
+        self.recv_seq = 0
+        save_enc_key(MOBILE_DIR / "enc_key", self.enc_key)
+        save_peer_pubkey(MOBILE_DIR / "paired_pubkey", self.peer_pubkey)
+        save_sequence(MOBILE_DIR / "send_seq", 0)
+        save_sequence(MOBILE_DIR / "recv_seq", 0)
+        log.info("rekey complete: fresh session keys derived")
 
     async def _message_loop(self):
         """Process encrypted messages from the current WebSocket connection."""
@@ -247,6 +302,7 @@ class MobileRelayClient:
 
         self.load_state()
 
+        backoff = 3  # seconds; doubles up to 60 on repeated failures
         while True:
             try:
                 await self.connect()
@@ -265,12 +321,20 @@ class MobileRelayClient:
                 self.send_seq = 0
                 save_sequence(MOBILE_DIR / "recv_seq", 0)
                 save_sequence(MOBILE_DIR / "send_seq", 0)
+                backoff = 3  # connection established — reset backoff
+
+                # CRITICAL: a new connection must never reuse the previous
+                # session's key+nonce space. Re-running the key exchange
+                # derives a FRESH shared secret, so reconnect cannot cause
+                # ChaCha20 keystream reuse even though counters restart at 0.
+                await self._rekey()
 
                 await self._message_loop()
 
             except websockets.exceptions.ConnectionClosed:
-                log.warning("connection closed, reconnecting in 3s...")
-                await asyncio.sleep(3)
+                log.warning("connection closed, reconnecting in %ds...", backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
                 # New connection = new session: reset both counters
                 self.recv_seq = 0
                 self.send_seq = 0
@@ -278,7 +342,8 @@ class MobileRelayClient:
                 save_sequence(MOBILE_DIR / "send_seq", 0)
             except Exception as e:
                 log.exception("error: %s", e)
-                await asyncio.sleep(3)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
                 self.recv_seq = 0
                 self.send_seq = 0
                 save_sequence(MOBILE_DIR / "recv_seq", 0)
@@ -322,7 +387,9 @@ class MobileRelayClient:
                 )
                 # Consume gateway.ready
                 await asyncio.wait_for(self.dash_ws.recv(), timeout=5)
-                log.info("connected to dashboard: %s", self.dashboard_url)
+                # Never log the full URL — it embeds the access token.
+                safe = self.dashboard_url.split("?")[0] + "?token=[REDACTED]"
+                log.info("connected to dashboard: %s", safe)
                 asyncio.create_task(self._dash_reader())
             except Exception as e:
                 log.warning("dashboard connect failed: %s", e)
@@ -370,6 +437,15 @@ class MobileRelayClient:
                 if not fut.done():
                     fut.set_exception(ConnectionError("dashboard disconnected"))
             self._dash_pending.clear()
+            # CRITICAL: clear dash_ws so the next dashboard_call lazily
+            # reconnects instead of reusing a dead socket forever.
+            async with self._dash_lock:
+                if self.dash_ws is not None:
+                    try:
+                        await self.dash_ws.close()
+                    except Exception:
+                        pass
+                    self.dash_ws = None
 
 
 def main():

@@ -48,6 +48,12 @@ PAIRING_WINDOW = 300  # 5 minutes
 # Security: per-IP join attempt rate limit (anti brute-force).
 JOIN_RATE_LIMIT = 5  # joins per IP per window
 JOIN_RATE_WINDOW = 60  # seconds
+# Security: cap total channels to bound memory — an unauthenticated attacker
+# could otherwise create a Channel per random channel_id (memory DoS).
+MAX_CHANNELS = 10000
+# Security: per-connection message rate limit on the forward path (anti-flood).
+MSG_RATE_LIMIT = 60  # messages per second per connection
+MSG_RATE_BURST = 120  # burst allowance
 
 
 @dataclass
@@ -69,6 +75,24 @@ class RelayServer:
         self._members: dict[object, str] = {}  # ws -> channel_id membership
         # Anti brute-force: (ip, channel_id) -> list of join timestamps
         self._join_attempts: dict[tuple[str, str], list[float]] = {}
+        # Anti-flood: ws -> (tokens, last_refill)
+        self._msg_tokens: dict[object, tuple[float, float]] = {}
+
+    def _msg_rate_limited(self, ws) -> bool:
+        """Token bucket per connection; True if the connection is flooding."""
+        now = time.time()
+        tokens, last = self._msg_tokens.get(ws, (MSG_RATE_BURST, now))
+        tokens = min(MSG_RATE_BURST, tokens + (now - last) * MSG_RATE_LIMIT)
+        if tokens < 1:
+            return True
+        self._msg_tokens[ws] = (tokens - 1, now)
+        return False
+
+    def _prune_msg_tokens(self, now: float) -> None:
+        """Drop token buckets for closed/expired sockets (bounded memory)."""
+        stale = [ws for ws in self._msg_tokens if ws not in self._members]
+        for ws in stale:
+            del self._msg_tokens[ws]
 
     def _rate_limited(self, ip: str, channel_id: str) -> bool:
         """True if this IP has exceeded the join rate limit for the channel."""
@@ -81,8 +105,37 @@ class RelayServer:
         attempts.append(now)
         return False
 
+    def _prune_join_attempts(self, now: float) -> None:
+        """Drop rate-limit entries older than the window so the dict can't
+        grow unboundedly on a busy relay."""
+        cutoff = now - JOIN_RATE_WINDOW
+        stale = [k for k, v in self._join_attempts.items() if not v or v[-1] < cutoff]
+        for k in stale:
+            del self._join_attempts[k]
+
+    def _client_ip(self, ws) -> str:
+        """Real client IP for rate limiting.
+
+        The relay sits behind Caddy on the same host, so remote_address is
+        always 127.0.0.1. Trust X-Forwarded-For ONLY when the direct peer is
+        the proxy (loopback); otherwise fall back to remote_address.
+        """
+        direct = ws.remote_address[0] if ws.remote_address else "?"
+        if direct in ("127.0.0.1", "::1", "localhost"):
+            try:
+                xff = ws.request.headers.get("X-Forwarded-For", "")
+                if xff:
+                    # First entry is the original client
+                    return xff.split(",")[0].strip()
+            except Exception:
+                pass
+        return direct
+
     async def join(self, ws, channel_id: str, role: str) -> bool:
         async with self._lock:
+            if channel_id not in self.channels and len(self.channels) >= MAX_CHANNELS:
+                log.warning("channel cap reached (%d) — rejecting join %s", MAX_CHANNELS, channel_id)
+                return False
             ch = self.channels.get(channel_id)
             if ch is None:
                 ch = Channel(channel_id=channel_id)
@@ -106,6 +159,14 @@ class RelayServer:
 
             log.info("join: channel=%s role=%s both=%s", channel_id, role, ch.both_connected)
 
+            # Explicit join ack so clients can distinguish success from
+            # rejection (rate limited / slot taken / channel full) instead
+            # of silently assuming success.
+            try:
+                await ws.send(json.dumps({"type": "joined", "channel": channel_id}))
+            except Exception:
+                pass
+
             if ch.both_connected:
                 await self._notify_paired(ch)
             return True
@@ -126,6 +187,12 @@ class RelayServer:
         if self._members.get(ws) != channel_id:
             await ws.send(json.dumps({"type": "error", "message": "not joined"}))
             return
+        # Anti-flood: per-connection token bucket — drop (and disconnect)
+        # connections that exceed the forward rate.
+        if self._msg_rate_limited(ws):
+            log.warning("flood: closing connection (rate limit)")
+            await ws.close(code=1008, reason="rate limited")
+            return
         ch = self.channels.get(channel_id)
         if ch is None:
             await ws.send(json.dumps({"type": "error", "message": "unknown channel"}))
@@ -144,6 +211,7 @@ class RelayServer:
 
     async def remove(self, ws, channel_id: str) -> None:
         async with self._lock:
+            self._msg_tokens.pop(ws, None)
             ch = self.channels.get(channel_id)
             if ch is None:
                 return
@@ -158,7 +226,8 @@ class RelayServer:
             # Without this, a stale half-open channel blocks re-pairing.
             if peer is not None and peer.open:
                 log.info("closing peer connection for channel %s", channel_id)
-                asyncio.create_task(peer.close(code=1000, reason="peer disconnected"))
+                t = asyncio.create_task(peer.close(code=1000, reason="peer disconnected"))
+                t.add_done_callback(lambda fut: fut.exception() if not fut.cancelled() else None)
             if ch.agent is None and ch.app is None:
                 del self.channels[channel_id]
                 log.info("channel %s removed (empty)", channel_id)
@@ -169,6 +238,8 @@ class RelayServer:
         while True:
             await asyncio.sleep(CLEANUP_INTERVAL)
             now = time.time()
+            self._prune_join_attempts(now)
+            self._prune_msg_tokens(now)
             stale = []
             async with self._lock:
                 for cid, ch in list(self.channels.items()):
@@ -185,7 +256,8 @@ class RelayServer:
                     # Close any lingering sockets so clients reconnect & rejoin
                     for sock in (ch.agent, ch.app):
                         if sock is not None and sock.open:
-                            asyncio.create_task(sock.close(code=1000, reason="channel expired"))
+                            t = asyncio.create_task(sock.close(code=1000, reason="channel expired"))
+                            t.add_done_callback(lambda fut: fut.exception() if not fut.cancelled() else None)
                         self._members.pop(sock, None)
                     del self.channels[cid]
                     log.info("channel %s cleaned up (age=%.0fs)", cid, age)
@@ -213,7 +285,7 @@ class RelayServer:
                         await ws.send(json.dumps({"type": "error", "message": "bad join"}))
                         continue
                     # Security: per-IP rate limit on join attempts (anti brute-force)
-                    ip = ws.remote_address[0] if ws.remote_address else "?"
+                    ip = self._client_ip(ws)
                     if self._rate_limited(ip, channel_id):
                         log.warning("rate limited: %s join %s", ip, channel_id)
                         await ws.send(json.dumps({"type": "error", "message": "rate limited"}))
@@ -265,6 +337,7 @@ async def main() -> None:
     async with serve(server.handle, RELAY_HOST, RELAY_PORT):
         await stop_event.wait()
         cleanup_task.cancel()
+        await asyncio.gather(cleanup_task, return_exceptions=True)
         log.info("relay shutting down")
 
 

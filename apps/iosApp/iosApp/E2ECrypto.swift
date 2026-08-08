@@ -12,7 +12,7 @@ enum E2ECrypto {
         return (Data(priv.rawRepresentation), Data(priv.publicKey.rawRepresentation))
     }
 
-    static func computeSharedSecret(myPriv: Data, peerPub: Data) -> Data? {
+    static func computeSharedSecret(myPriv: Data, peerPub: Data, psk: Data? = nil) -> Data? {
         guard let priv = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: myPriv),
               let pub = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: peerPub) else {
             return nil
@@ -24,7 +24,20 @@ enum E2ECrypto {
         // The Python side (crypto.py) computes raw ECDH then derives directional
         // keys with ONE HKDF pass (info="chachapoly-key-<dir>"). If we derived
         // here too, the keys would be double-HKDF'd and never match the agent.
-        return shared.withUnsafeBytes { Data($0) }
+        let raw = shared.withUnsafeBytes { Data($0) }
+        if let psk {
+            // PSK-blind with the pairing code: binds the agreement to knowledge
+            // of the code so a MITM (relay) substituting its pubkey can't derive
+            // the same final secret. Must match Python: HKDF(raw, salt=psk,
+            // info="chachapoly-psk-blend", len=32).
+            return HKDF<SHA256>.deriveKey(
+                inputKeyMaterial: SymmetricKey(data: raw),
+                salt: psk,
+                info: Data("chachapoly-psk-blend".utf8),
+                outputByteCount: keySize
+            ).withUnsafeBytes { Data($0) }
+        }
+        return raw
     }
 
     /// Derive direction-separated ChaChaPoly keys from the ECDH shared secret.
@@ -103,8 +116,9 @@ enum E2ECrypto {
 
     static func channelIdFromPairingCode(_ code: String) -> String {
         let hash = SHA256.hash(data: code.data(using: .utf8)!)
+        // 8 bytes = 64 bits of channel namespace (32-bit was squatting-prone)
         return hash.withUnsafeBytes { Data($0) }
-            .prefix(4)
+            .prefix(8)
             .map { String(format: "%02x", $0) }
             .joined()
     }

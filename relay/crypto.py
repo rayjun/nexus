@@ -97,17 +97,30 @@ def derive_enc_key(shared_secret: bytes, direction: str = "") -> bytes:
     return _hkdf_sha256(shared_secret, KEY_SIZE, HKDF_SALT, info)
 
 
-def compute_shared_secret(my_priv: bytes, peer_pub: bytes) -> bytes:
+def compute_shared_secret(my_priv: bytes, peer_pub: bytes, psk: bytes | None = None) -> bytes:
     """Raw X25519 shared secret (matches Swift CryptoKit sharedSecretFromKeyAgreement).
 
     NOTE: use crypto_scalarmult (raw X25519), NOT crypto_box_beforenm —
     libsodium's box precomputes X25519 + HSalsa20, which does NOT match the
     raw X25519 output the iOS side derives keys from.
+
+    When `psk` is given (the pairing code), the raw ECDH output is blinded
+    with it: final = HKDF(raw_ecdh, salt=psk). This binds the key agreement
+    to knowledge of the pairing code — a MITM (relay or on-path attacker)
+    who substitutes its own public key cannot derive the same final secret
+    without the code, defeating unauthenticated-pubkey MITM.
     """
-    return crypto_scalarmult(bytes(PrivateKey(my_priv)), bytes(PublicKey(peer_pub)))
+    raw = crypto_scalarmult(bytes(PrivateKey(my_priv)), bytes(PublicKey(peer_pub)))
+    if psk is not None:
+        return _hkdf_sha256(raw, KEY_SIZE, psk, b"chachapoly-psk-blend")
+    return raw
 
 
 def make_nonce(sequence: int, channel_id: str) -> bytes:
+    # Guard: seq is packed into 4 bytes — at 2^32 the nonce would wrap and
+    # reuse key+nonce (keystream reuse). Fail loudly instead of silently.
+    if sequence >= 0xFFFFFFFF:
+        raise OverflowError(f"sequence {sequence} exceeds 32-bit nonce space")
     seq_bytes = struct.pack(">I", sequence)
     ch_bytes = bytes.fromhex(channel_id.ljust(16, "0")[:16])
     return seq_bytes + ch_bytes[:8]
@@ -149,13 +162,23 @@ def decrypt_jsonrpc(wire_payload: str, key: bytes) -> dict:
 
 
 def channel_id_from_pairing_code(code: str) -> str:
-    return hashlib.sha256(code.encode("utf-8")).hexdigest()[:8]
+    # 8 bytes = 64 bits of channel namespace (32-bit was squatting-prone)
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()[:16]
+
+
+def _write_private(path: Path, data: bytes) -> None:
+    """Write with 0600 from creation — no world-readable window (umask
+    would otherwise create 0644 and chmod happens after)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
 
 
 def save_enc_key(path: Path, key: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(key)
-    os.chmod(path, 0o600)
+    _write_private(path, key)
 
 
 def load_enc_key(path: Path) -> bytes:
@@ -163,9 +186,7 @@ def load_enc_key(path: Path) -> bytes:
 
 
 def save_peer_pubkey(path: Path, pubkey: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(pubkey)
-    os.chmod(path, 0o600)
+    _write_private(path, pubkey)
 
 
 def load_peer_pubkey(path: Path) -> bytes:

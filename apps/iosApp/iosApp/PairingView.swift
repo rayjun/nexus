@@ -8,6 +8,7 @@ struct PairingView: View {
     @State private var errorMessage = ""
     @State private var isAdding = false
     @ObservedObject private var relay = RelayClient.shared
+    @State private var pairingObserver: NSObjectProtocol?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -128,9 +129,30 @@ struct PairingView: View {
         UserDefaults.standard.set(trimmedRelay, forKey: "relay_url")
         let displayName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
         relay.addServer(relayURL: trimmedRelay, name: displayName.isEmpty ? nil : displayName, code: trimmedCode)
-        // The server list view takes over once paired; watch for the paired notification.
-        NotificationCenter.default.addObserver(forName: NSNotification.Name("RelayPaired"), object: nil, queue: .main) { _ in
+        // Listen for pairing completion or failure; stop the spinner either way.
+        pairingObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("RelayPaired"),
+            object: nil, queue: .main
+        ) { _ in
             self.isAdding = false
+            self.removeObserver()
         }
+        pairingObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("RelayPairingFailed"),
+            object: nil, queue: .main
+        ) { note in
+            self.isAdding = false
+            let msg = (note.userInfo?["message"] as? String) ?? "Pairing failed"
+            self.isError = true
+            self.errorMessage = msg
+            self.removeObserver()
+        }
+    }
+
+    private func removeObserver() {
+        if let pairingObserver {
+            NotificationCenter.default.removeObserver(pairingObserver)
+        }
+        pairingObserver = nil
     }
 }

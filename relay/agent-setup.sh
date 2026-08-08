@@ -95,30 +95,50 @@ if [ "$PAIR_MODE" = "1" ]; then
     sleep 1
 fi
 
-echo "--- background daemon ---"
-# Kill any previous instance first
+echo "--- background daemon (systemd) ---"
+# Stop any previous instance first
 pkill -f "relay_agent.py --relay" 2>/dev/null || true
+systemctl --user stop nexus-relay-agent.service 2>/dev/null || true
 sleep 1
 
-nohup env HERMES_DASHBOARD_WS="$DASH_WS" \
-    "$PYTHON" "$RELAY_DIR/relay_agent.py" \
-    --relay "$RELAY_URL" \
-    > "$RELAY_DIR/agent.log" 2>&1 &
+# Token goes in a 0600 environment file, never in the unit/argv/ps.
+umask 077
+cat > "$RELAY_DIR/agent.env" <<EOF
+HERMES_DASHBOARD_WS=$DASH_WS
+EOF
+chmod 600 "$RELAY_DIR/agent.env"
 
-AGENT_PID=$!
-echo "Agent started (pid $AGENT_PID), log: $RELAY_DIR/agent.log"
+cat > "$HOME/.config/systemd/user/nexus-relay-agent.service" <<EOF
+[Unit]
+Description=Nexus Relay Agent (Hermes mobile bridge)
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=$RELAY_DIR/agent.env
+ExecStart=$PYTHON $RELAY_DIR/relay_agent.py --relay $RELAY_URL
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now nexus-relay-agent.service
+sleep 3
 
 echo ""
 echo "=== [5/5] Verify ==="
-sleep 3
-if kill -0 "$AGENT_PID" 2>/dev/null; then
-    echo "Agent process is running. Recent log:"
-    tail -5 "$RELAY_DIR/agent.log"
+if systemctl --user is-active --quiet nexus-relay-agent.service; then
+    echo "Agent service is running (Restart=always, autostart on boot)."
+    journalctl --user -u nexus-relay-agent.service -n 8 --no-pager | tail -8
     echo ""
     echo "Done. The Nexus app should now connect."
-    echo "Check status anytime: tail -f $RELAY_DIR/agent.log"
+    echo "Check status: systemctl --user status nexus-relay-agent"
+    echo "View logs: journalctl --user -u nexus-relay-agent -f"
 else
-    echo "Agent process exited — check the log:"
-    cat "$RELAY_DIR/agent.log"
+    echo "Agent service failed to start — check logs:"
+    journalctl --user -u nexus-relay-agent.service -n 20 --no-pager
     exit 1
 fi

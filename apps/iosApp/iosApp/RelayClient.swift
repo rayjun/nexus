@@ -62,6 +62,16 @@ final class RelayClient: NSObject, ObservableObject {
 
         let conn = ServerConnection(profile: server)
         conn.onStatusChange = { [weak self] in self?.refreshStatus(serverID: server.id) }
+        conn.onPairingFailure = { [weak self] message in
+            // Pairing failed — remove the just-added server so it doesn't
+            // become a zombie that reconnects-and-fails forever.
+            self?.removeServer(serverID: server.id)
+            NotificationCenter.default.post(
+                name: NSNotification.Name("RelayPairingFailed"),
+                object: server.id,
+                userInfo: ["message": message]
+            )
+        }
         connections[server.id] = conn
         conn.startPairing(code: code)
         return server.id
@@ -84,8 +94,10 @@ final class RelayClient: NSObject, ObservableObject {
     }
 
     func removeServer(serverID: String) {
-        connections[serverID]?.disconnect()
-        connections[serverID]?.clearKeys()
+        if let conn = connections[serverID] {
+            conn.disconnect()  // sets shouldReconnect=false — no zombie reconnect
+            conn.clearKeys()
+        }
         connections.removeValue(forKey: serverID)
         servers.removeAll { $0.id == serverID }
         ServerStore.save(servers)
@@ -100,15 +112,18 @@ final class RelayClient: NSObject, ObservableObject {
     }
 
     private func refreshStatus(serverID: String) {
-        guard let conn = connections[serverID],
-              let idx = servers.firstIndex(where: { $0.id == serverID }) else { return }
-        servers[idx].isOnline = conn.isConnected
-        if conn.isConnected {
-            servers[idx].lastConnectedAt = Date()
-        }
-        ServerStore.save(servers)
+        // URLSession delegate queues are non-main; hop to main before
+        // mutating @Published state / writing UserDefaults.
         DispatchQueue.main.async { [weak self] in
-            self?.objectWillChange.send()
+            guard let self,
+                  let conn = self.connections[serverID],
+                  let idx = self.servers.firstIndex(where: { $0.id == serverID }) else { return }
+            self.servers[idx].isOnline = conn.isConnected
+            if conn.isConnected {
+                self.servers[idx].lastConnectedAt = Date()
+            }
+            ServerStore.save(self.servers)
+            self.objectWillChange.send()
         }
     }
 
