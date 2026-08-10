@@ -207,6 +207,9 @@ class MobileRelayClient:
                 self.send_seq = 0
                 save_sequence(MOBILE_DIR / "recv_seq", 0)
                 save_sequence(MOBILE_DIR / "send_seq", 0)
+                # Re-key on reconnect — never reuse the previous session's
+                # key+nonce space (ChaCha20 keystream reuse protection).
+                await self._rekey()
             except Exception as e:
                 log.warning("reconnect failed: %s", e)
 
