@@ -9,7 +9,13 @@ struct ServerProfile: Identifiable, Codable, Equatable {
     var channelID: String   // derived from the pairing code
     var addedAt: Date
     var lastConnectedAt: Date?
-    var isOnline: Bool      // transient connection state
+    /// Transient connection state — NEVER persisted (it would go stale across
+    /// relaunches; the real value comes from the live connection).
+    var isOnline: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, relayURL, channelID, addedAt, lastConnectedAt
+    }
 }
 
 /// Persists the list of paired servers in UserDefaults.

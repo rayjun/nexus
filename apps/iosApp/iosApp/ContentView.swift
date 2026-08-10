@@ -345,8 +345,13 @@ struct ContentView: View {
         let relay = serverRelayDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = serverCodeDraft.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let name = serverNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: relay), url.scheme == "wss" || url.scheme == "ws" else {
-            toast = ToastMessage(text: "Enter a valid wss:// relay URL", kind: .error)
+        guard let url = URL(string: relay) else {
+            toast = ToastMessage(text: "Enter a valid relay URL", kind: .error)
+            return
+        }
+        let schemeOK = url.scheme == "wss" || (isDebugBuild && url.scheme == "ws" && isLocalHost(url))
+        guard schemeOK else {
+            toast = ToastMessage(text: "Relay must use wss:// (TLS)", kind: .error)
             return
         }
         isAddingAgent = true
@@ -2287,10 +2292,28 @@ struct ContentView: View {
         statusMessage = "Disconnected"
     }
 
+    private var isDebugBuild: Bool {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    private func isLocalHost(_ url: URL) -> Bool {
+        guard let host = url.host else { return false }
+        return host == "127.0.0.1" || host == "localhost" || host == "::1"
+    }
+
     private func saveRelayUrl() {
         let trimmed = relayUrlDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let url = URL(string: trimmed), url.scheme == "wss" || url.scheme == "ws" else {
-            toast = ToastMessage(text: "Enter a valid wss:// relay URL", kind: .error)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else {
+            toast = ToastMessage(text: "Enter a valid relay URL", kind: .error)
+            return
+        }
+        let schemeOK = url.scheme == "wss" || (isDebugBuild && url.scheme == "ws" && isLocalHost(url))
+        guard schemeOK else {
+            toast = ToastMessage(text: "Relay must use wss:// (TLS)", kind: .error)
             return
         }
         UserDefaults.standard.set(trimmed, forKey: "relay_url")

@@ -26,8 +26,9 @@
     <true/>
     <key>NSAppTransportSecurity</key>
     <dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <true/>
+        <!-- Production: ATS enforces TLS for all remote connections. Only
+             local networking (127.0.0.1 / Tailscale) is exempted for the
+             DEBUG relay; wss:// is required everywhere else. -->
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>

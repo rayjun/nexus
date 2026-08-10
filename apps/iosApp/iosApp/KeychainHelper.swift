@@ -4,7 +4,10 @@ import Security
 enum KeychainHelper {
     private static let service = Bundle.main.bundleIdentifier ?? "com.rayjun.nexus"
 
-    static func save(_ value: String, key: String) {
+    /// Returns true on success — callers should surface failures (silent
+    /// keychain errors would lose E2E keys with no warning).
+    @discardableResult
+    static func save(_ value: String, key: String) -> Bool {
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -19,7 +22,8 @@ enum KeychainHelper {
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        SecItemAdd(attrs as CFDictionary, nil)
+        let status = SecItemAdd(attrs as CFDictionary, nil)
+        return status == errSecSuccess
     }
 
     static func load(key: String) -> String {
@@ -40,12 +44,13 @@ enum KeychainHelper {
         return value
     }
 
-    static func delete(key: String) {
+    @discardableResult
+    static func delete(key: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
         ]
-        SecItemDelete(query as CFDictionary)
+        return SecItemDelete(query as CFDictionary) == errSecSuccess
     }
 }

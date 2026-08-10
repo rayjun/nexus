@@ -114,6 +114,8 @@ UNIT
 
 # NOTE: HERMES_DASHBOARD_WS must point at your loopback Dashboard WS with its
 # session token, e.g. ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN
+# The token lives in a 0600 EnvironmentFile — never in the unit file (which
+# is world-readable) or on the command line.
 cat > /tmp/nexus-relay-agent.service <<UNIT
 [Unit]
 Description=Nexus Relay Agent
@@ -121,7 +123,7 @@ After=network.target nexus-relay.service
 
 [Service]
 ExecStart=$PYTHON $RELAY_DIR/relay_agent.py --relay wss://$DOMAIN/relay
-Environment=HERMES_DASHBOARD_WS=ws://127.0.0.1:9119/api/ws?token=REPLACE_WITH_DASHBOARD_TOKEN
+EnvironmentFile=$RELAY_DIR/agent.env
 Restart=always
 RestartSec=5
 User=$(whoami)
@@ -134,9 +136,23 @@ sudo cp /tmp/nexus-relay.service /etc/systemd/system/
 sudo cp /tmp/nexus-relay-agent.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
+# Agent environment file (0600): fail loudly if the token is still the
+# placeholder so a production deploy can't silently ship with a fake token.
+if [ ! -f "$RELAY_DIR/agent.env" ] || grep -q "REPLACE_WITH_DASHBOARD_TOKEN" "$RELAY_DIR/agent.env" 2>/dev/null; then
+    echo ""
+    echo "!!! Set the real Dashboard token, then re-run this script:"
+    echo "    sudo tee $RELAY_DIR/agent.env >/dev/null <<EOF"
+    echo "    HERMES_DASHBOARD_WS=ws://127.0.0.1:9119/api/ws?token=YOUR_REAL_TOKEN"
+    echo "    EOF"
+    echo "    sudo chmod 600 $RELAY_DIR/agent.env"
+    exit 1
+fi
+sudo chmod 600 "$RELAY_DIR/agent.env"
+
 echo "=== [4/6] Restart services ==="
 sudo systemctl enable --now nexus-relay.service || true
 sudo systemctl restart nexus-relay.service
+sudo systemctl restart nexus-relay-agent.service
 sleep 2
 sudo systemctl status nexus-relay.service --no-pager | head -5 || true
 
@@ -144,16 +160,17 @@ echo ""
 echo "======================================================"
 echo " NEXT STEPS"
 echo "======================================================"
-echo "1. Set the real Dashboard token (once):"
-echo "     sudo nano /etc/systemd/system/nexus-relay-agent.service"
-echo "   set  HERMES_DASHBOARD_WS=ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN"
-echo "   then: sudo systemctl daemon-reload"
+echo "1. Set the real Dashboard token (once, before re-running):"
+echo "     sudo tee $RELAY_DIR/agent.env >/dev/null <<EOF"
+echo "     HERMES_DASHBOARD_WS=ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN"
+echo "     EOF"
+echo "     sudo chmod 600 $RELAY_DIR/agent.env"
 echo ""
 echo "2. First-time pairing (run ONCE, foreground):"
 echo "     cd $RELAY_DIR"
-echo "     HERMES_DASHBOARD_WS='ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN' \\"
-echo "       $PYTHON relay_agent.py --relay wss://$DOMAIN/relay --pair --code 123456"
-echo "   Enter code 123456 in the Nexus app, wait for 'pairing complete'."
+echo "     HERMES_DASHBOARD_WS='ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN' \\\\"
+echo "       $PYTHON relay_agent.py --relay wss://$DOMAIN/relay --pair --code K7M2P9QX"
+echo "   Enter code K7M2P9QX in the Nexus app, wait for 'pairing complete'."
 echo "   Then Ctrl-C (the pairing state is saved)."
 echo ""
 echo "3. Start the agent daemon (after pairing):"

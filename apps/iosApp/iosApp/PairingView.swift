@@ -111,13 +111,34 @@ struct PairingView: View {
         return !relayUrl.isEmpty && trimmedCode.count >= 8
     }
 
+    private var isDebugBuild: Bool {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    private func isLocalHost(_ url: URL) -> Bool {
+        guard let host = url.host else { return false }
+        return host == "127.0.0.1" || host == "localhost" || host == "::1"
+    }
+
     private func startPairing() {
         isError = false
         let trimmedRelay = relayUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard let url = URL(string: trimmedRelay), url.scheme == "wss" || url.scheme == "ws" else {
+        guard let url = URL(string: trimmedRelay) else {
             isError = true
-            errorMessage = "Enter a valid wss:// relay URL"
+            errorMessage = "Enter a valid relay URL"
+            return
+        }
+        // Production requires TLS. DEBUG builds additionally allow ws:// to a
+        // loopback/local relay for simulator testing.
+        let schemeOK = url.scheme == "wss" || (isDebugBuild && url.scheme == "ws" && isLocalHost(url))
+        guard schemeOK else {
+            isError = true
+            errorMessage = "Relay must use wss:// (TLS)"
             return
         }
         guard trimmedCode.count >= 8, trimmedCode.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
