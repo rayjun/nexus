@@ -209,27 +209,48 @@ class MobileRelayClient:
                 save_sequence(MOBILE_DIR / "send_seq", 0)
                 # Re-key on reconnect — never reuse the previous session's
                 # key+nonce space (ChaCha20 keystream reuse protection).
-                await self._rekey()
+                # pair_and_run did NOT wait for 'paired' here — _rekey does.
+                await self._rekey(wait_paired=True)
             except Exception as e:
                 log.warning("reconnect failed: %s", e)
 
-    async def _rekey(self) -> None:
+    async def _rekey(self, wait_paired: bool = False) -> None:
         """Re-derive session keys on a new connection.
 
         Generates a fresh ephemeral X25519 keypair, exchanges public keys
         with the app (plaintext, like the initial pairing handshake), and
         derives NEW directional keys. Guarantees a reconnect never reuses
         the previous session's key+nonce space (ChaCha20 keystream reuse).
+
+        `wait_paired`: set True when the caller did NOT already wait for the
+        'paired' event (pair_and_run's reconnect path) — the relay only sends
+        'paired' once both endpoints are in the channel, so rekeying before
+        the app joins would block forever.
         """
+        if wait_paired:
+            while True:
+                try:
+                    msg = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=15))
+                except asyncio.TimeoutError:
+                    raise ConnectionError("rekey: no paired event (app absent)") from None
+                except websockets.exceptions.ConnectionClosed as e:
+                    log.warning("rekey: connection closed (%s)", e)
+                    raise
+                if msg.get("type") == "paired":
+                    break
+
         self.keypair = KeyPair()
         # Send our fresh public key (plaintext — same as pairing handshake)
         await self._send_data(base64.b64encode(self.keypair.public_bytes).decode())
         log.info("rekey: sent fresh public key, waiting for app's...")
 
-        # Receive the app's fresh public key
+        # Receive the app's fresh public key — bounded wait so a stuck peer
+        # can't block the reconnect loop forever.
         while True:
             try:
-                msg = json.loads(await self.ws.recv())
+                msg = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=10))
+            except asyncio.TimeoutError:
+                raise ConnectionError("rekey: timed out waiting for app public key") from None
             except websockets.exceptions.ConnectionClosed as e:
                 log.warning("rekey: connection closed (%s)", e)
                 raise
@@ -326,10 +347,9 @@ class MobileRelayClient:
                 save_sequence(MOBILE_DIR / "send_seq", 0)
                 backoff = 3  # connection established — reset backoff
 
-                # CRITICAL: a new connection must never reuse the previous
-                # session's key+nonce space. Re-running the key exchange
-                # derives a FRESH shared secret, so reconnect cannot cause
-                # ChaCha20 keystream reuse even though counters restart at 0.
+                # Re-key on reconnect — never reuse the previous session's
+                # key+nonce space (ChaCha20 keystream reuse protection).
+                # run() already waited for 'paired' above.
                 await self._rekey()
 
                 await self._message_loop()

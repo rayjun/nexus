@@ -89,6 +89,16 @@ final class RelayClient: NSObject, ObservableObject {
         }
     }
 
+    func updateServer(serverID: String, relayURL: String? = nil, name: String? = nil) {
+        guard let idx = servers.firstIndex(where: { $0.id == serverID }) else { return }
+        if let relayURL { servers[idx].relayURL = relayURL }
+        if let name { servers[idx].name = name }
+        ServerStore.save(servers)
+        // Reconnect with the new URL (disconnect first so connect() isn't a no-op)
+        connections[serverID]?.disconnect()
+        connect(serverID: serverID)
+    }
+
     func disconnect(serverID: String) {
         connections[serverID]?.disconnect()
     }

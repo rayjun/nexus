@@ -111,7 +111,13 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
         d.onMessage = { [weak self] msg in self?.handleMessage(msg) }
         delegate = d
         session = URLSession(configuration: config, delegate: d, delegateQueue: nil)
-        guard let url = URL(string: profile.relayURL) else { return }
+        guard let url = URL(string: profile.relayURL) else {
+            // Invalid URL — surface it instead of silently staying disconnected.
+            log("invalid relay URL: %@", profile.relayURL)
+            isConnected = false
+            onStatusChange?()
+            return
+        }
         task = session.webSocketTask(with: url)
         task?.resume()
         receiveLoop(epoch: epoch)

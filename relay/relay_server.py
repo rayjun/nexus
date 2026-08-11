@@ -10,13 +10,14 @@ Deploy: run on a public server behind a TLS-terminating reverse proxy.
 Protocol (all messages are JSON, sent as WebSocket text frames):
 
   Client → Relay:
-    {"type": "join", "channel": "<8-char-hex>", "role": "agent"|"app"}
-    {"type": "data", "channel": "<8-char-hex>", "payload": "base64(...)"}
+    {"type": "join", "channel": "<16-char-hex>", "role": "agent"|"app"}
+    {"type": "data", "channel": "<16-char-hex>", "payload": "base64(...)"}
     {"type": "ping"}
 
   Relay → Client:
-    {"type": "paired", "channel": "<8-char-hex>"}
-    {"type": "data", "channel": "<8-char-hex>", "payload": "base64(...)"}
+    {"type": "joined", "channel": "<16-char-hex>"}   # join accepted (sent first)
+    {"type": "paired", "channel": "<16-char-hex>"}   # both endpoints present
+    {"type": "data", "channel": "<16-char-hex>", "payload": "base64(...)"}
     {"type": "pong"}
     {"type": "error", "message": "..."}
 """
@@ -183,15 +184,16 @@ class RelayServer:
         log.info("paired: channel=%s", ch.channel_id)
 
     async def forward(self, ws, channel_id: str, payload: str) -> None:
-        # C3: reject data from sockets that never joined this channel
-        if self._members.get(ws) != channel_id:
-            await ws.send(json.dumps({"type": "error", "message": "not joined"}))
-            return
-        # Anti-flood: per-connection token bucket — drop (and disconnect)
-        # connections that exceed the forward rate.
+        # Anti-flood FIRST (before membership): a socket that never joined
+        # must not be able to flood 'not joined' error responses without
+        # consuming tokens.
         if self._msg_rate_limited(ws):
             log.warning("flood: closing connection (rate limit)")
             await ws.close(code=1008, reason="rate limited")
+            return
+        # C3: reject data from sockets that never joined this channel
+        if self._members.get(ws) != channel_id:
+            await ws.send(json.dumps({"type": "error", "message": "not joined"}))
             return
         ch = self.channels.get(channel_id)
         if ch is None:

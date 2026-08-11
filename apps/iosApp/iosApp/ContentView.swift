@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var deviceToken = KeychainHelper.load(key: "device_token")
     @State private var deviceName = UIDevice.current.name
     @State private var statusMessage = ""
+    @State private var errorMessage = ""
     @State private var nodeName = ""
     @State private var agents: [AgentInfo] = []
     @State private var sessions: [SessionSummary] = []
@@ -103,6 +104,14 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RelayPaired"))) { _ in
             // Peer confirmed present in channel — (re)load home data.
             Task { await loadHomeViaWS() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RelayPairingFailed"))) { note in
+            // Pairing failed — surface the reason instead of a dead spinner.
+            let msg = (note.userInfo?["message"] as? String) ?? "Pairing failed"
+            toast = ToastMessage(text: msg, kind: .error)
+            if let serverID = note.object as? String, serverID == relay.activeServerID {
+                relay.activeServerID = relay.servers.first?.id
+            }
         }
         .sheet(isPresented: $isShowingComposer) {
             goalComposer
@@ -274,8 +283,8 @@ struct ContentView: View {
                     }
                 }
 
-                if !statusMessage.isEmpty && statusMessage.lowercased().contains("error") {
-                    statusPill(text: statusMessage, positive: false)
+                if !errorMessage.isEmpty {
+                    statusPill(text: errorMessage, positive: false)
                 }
             }
             .padding(.horizontal, 20)
@@ -553,7 +562,18 @@ struct ContentView: View {
         return VStack(alignment: .leading, spacing: 0) {
             Button {
                 relay.setActive(serverID: server.id)
-                selectedAgentServer = nil
+                // Enter the dashboard for this server (dashboard consumes an
+                // AgentInfo; map the relay server to one).
+                selectedAgentServer = AgentInfo(
+                    id: server.id,
+                    name: server.name,
+                    baseUrl: server.relayURL,
+                    status: server.isOnline ? "online" : "offline",
+                    profile: "default",
+                    model: "",
+                    createdAt: "",
+                    lastSeenAt: nil
+                )
             } label: {
                 HStack(spacing: 14) {
                     ZStack {
@@ -791,7 +811,7 @@ struct ContentView: View {
                     Button {
                         Task {
                             await createAgent()
-                            if !statusMessage.lowercased().contains("error") {
+                            if errorMessage.isEmpty {
                                 isShowingCreateAgent = false
                             }
                         }
@@ -1483,7 +1503,7 @@ struct ContentView: View {
     }
 
     private var canAppendGoal: Bool {
-        !followUpDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !deviceToken.isEmpty
+        !followUpDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func toolCallsView(_ calls: String) -> some View {
@@ -1643,11 +1663,11 @@ struct ContentView: View {
     }
 
     private var canCreateSession: Bool {
-        !goalDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !deviceToken.isEmpty
+        !goalDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var canAddAgent: Bool {
-        !agentNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !agentUrlDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !deviceToken.isEmpty
+        !agentNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !agentUrlDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func mobileTopBar(title: String, subtitle: String, onSettings: (() -> Void)? = nil) -> some View {
@@ -2027,6 +2047,7 @@ struct ContentView: View {
         } catch {
             await MainActor.run {
                 self.statusMessage = "Failed to load: \(error.localizedDescription)"
+                self.errorMessage = error.localizedDescription
                 self.isLoadingSessions = false
                 self.isLoadingCron = false
                 self.isLoadingApprovals = false
@@ -2049,15 +2070,18 @@ struct ContentView: View {
     }
 
     private func createAgent() async {
-        // No-op: agent creation not available via WebSocket RPC
+        // Agent creation is not available over the relay RPC surface.
+        errorMessage = "Agent creation isn't supported over the relay connection yet"
     }
 
     private func deleteAgent(_ agent: PersistentAgent) async {
         // No-op: agent deletion not available via WebSocket RPC
+        errorMessage = "Agent deletion isn't supported over the relay connection yet"
     }
 
     private func updatePersistentAgent() async {
         // No-op: agent update not available via WebSocket RPC
+        errorMessage = "Agent editing isn't supported over the relay connection yet"
     }
 
     private func sessionMessages(for sourceSessionId: String) async throws -> (activeSessionId: String, messages: [[String: Any]]) {
@@ -2113,7 +2137,7 @@ struct ContentView: View {
             }
         } catch {
             await MainActor.run {
-                self.statusMessage = error.localizedDescription
+                self.errorMessage = error.localizedDescription
                 self.isLoadingAgentMessages = false
             }
         }
@@ -2220,7 +2244,8 @@ struct ContentView: View {
             isShowingComposer = false
             goalDraft = ""
         } catch {
-            statusMessage = error.localizedDescription
+            errorMessage = error.localizedDescription
+            toast = ToastMessage(text: "Failed to create session", kind: .error)
         }
         isCreatingSession = false
     }
@@ -2317,9 +2342,13 @@ struct ContentView: View {
             return
         }
         UserDefaults.standard.set(trimmed, forKey: "relay_url")
-        relay.disconnect()
+        // CRITICAL: update the active server's relayURL — the connection uses
+        // ServerProfile.relayURL, not UserDefaults. Without this the
+        // "Save & Reconnect" silently reconnects to the OLD address.
         if let serverID = relay.activeServerID {
-            relay.connect(serverID: serverID)
+            relay.updateServer(serverID: serverID, relayURL: trimmed)
+        } else {
+            relay.disconnect()
         }
         isShowingSettings = false
         toast = ToastMessage(text: "Relay updated, reconnecting…", kind: .success)
