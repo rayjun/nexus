@@ -139,31 +139,47 @@ The relay listens on `127.0.0.1:9120` by default. Caddy terminates TLS and proxi
 
 - Hermes Gateway/Dashboard running on the same machine (or reachable)
 - Dashboard WebSocket URL + session token
+- Python 3.9+ (any recent python3 works; the installer builds its own venv)
 
-### First-time pairing
+### Install the agent CLI (one command)
 
 ```bash
-python3 relay_agent.py \
+curl -fsSL https://raw.githubusercontent.com/rayjun/nexus/main/relay/install-agent.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+This installs `nexus-agent` into `~/.nexus` (venv + deps + code) and a
+`nexus-agent` shim into `~/.local/bin`.
+
+### Configure + pair
+
+```bash
+nexus-agent setup \
   --relay wss://your-domain.com/relay \
-  --dashboard "ws://127.0.0.1:9119/api/ws?token=YOUR_DASHBOARD_TOKEN" \
-  --pair --code 123456
+  --code K7M2P9QX \
+  --dashboard "ws://127.0.0.1:9119/api/ws?token=YOUR_DASHBOARD_TOKEN"
+
+nexus-agent pair          # prints the code and waits for the app
 ```
 
 Output:
 
 ```
-Pairing code: 123456
+Pairing code: K7M2P9QX
 Enter this in Nexus app.
 ```
 
-Enter the same code in the Nexus app's Pairing screen. The agent prints `pairing complete` and starts the communication loop.
+Enter the same code (or scan the QR with `nexus-agent pair --qr '<payload>'`)
+in the Nexus app's Pairing screen. The agent prints `pairing complete` and
+starts the communication loop.
 
-### Normal run (after pairing)
+### Normal run (after pairing) — supervised
 
 ```bash
-python3 relay_agent.py \
-  --relay wss://your-domain.com/relay \
-  --dashboard "ws://127.0.0.1:9119/api/ws?token=YOUR_DASHBOARD_TOKEN"
+nexus-agent start         # daemon + auto-reconnect (logs: ~/.hermes/mobile-agent.log)
+nexus-agent status        # verify it is running
+nexus-agent stop          # stop it
+nexus-agent update        # pull latest code and restart
 ```
 
 The agent:
@@ -172,10 +188,11 @@ The agent:
 3. Waits for the paired app to connect
 4. Bridges every encrypted JSON-RPC call to the real Dashboard
 5. Reconnects automatically if the Relay connection drops
+   (exponential backoff, fresh E2E keys per reconnect)
 
-### As a systemd service
+### As a systemd service (optional)
 
-```ini
+If you prefer systemd over the built-in daemon:
 # /etc/systemd/system/nexus-relay-agent.service
 [Unit]
 Description=Nexus Relay Agent

@@ -5,7 +5,7 @@ A native iOS app for managing AI agents powered by [Hermes Agent](https://github
 ## Features
 
 - **E2E-Encrypted Relay** — X25519 key agreement + ChaCha20-Poly1305 AEAD over a lightweight public relay. The relay only sees ciphertext and a channel ID; it never sees message content.
-- **6-Digit Pairing** — Pair once with a short code; keys persist for automatic reconnect (0-RTT).
+- **8-Char Pairing** — Pair once with a code or QR; keys persist for automatic reconnect.
 - **Session Management** — Browse and resume Hermes sessions with a full timeline view.
 - **Agent Chat** — Send prompts to Hermes agents, approve/deny tool approvals, interrupt running sessions.
 - **Cron & Automation** — View and manage Hermes cron jobs from your phone.
@@ -43,35 +43,58 @@ Security properties:
 
 Full deployment instructions: **[docs/RELAY-DEPLOYMENT.md](docs/RELAY-DEPLOYMENT.md)**
 
-```
-1. Deploy the relay stack (one-time):
-     bash relay/deploy-relay.sh install <your-relay-domain>
+### 60-second setup
 
-2. Start the agent client in pairing mode on your server:
-     cd ~/nexus-relay
-     HERMES_DASHBOARD_WS='ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN' \
-       python3 relay_agent.py --relay wss://<your-relay-domain>/relay \
-       --pair --code 123456
+**1. Deploy the relay stack** (once, on a public server with a domain):
 
-3. In the Nexus app: enter the 6-digit code → Dashboard.
+```bash
+bash relay/deploy-relay.sh install <your-relay-domain>
 ```
 
-After pairing, the app reconnects automatically with the stored keys — no URL, token, or certificate configuration on the device.
+**2. Install the agent CLI** on any machine that runs your Hermes Dashboard:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rayjun/nexus/main/relay/install-agent.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**3. Configure + pair** (one command each):
+
+```bash
+nexus-agent setup --relay wss://<your-relay-domain>/relay --code K7M2P9QX \
+  --dashboard 'ws://127.0.0.1:9119/api/ws?token=YOUR_TOKEN'
+nexus-agent pair        # waits for the app
+```
+
+**4. In the Nexus app**: enter the relay URL + code (or scan the on-screen
+QR with `nexus-agent pair --qr '<payload>'`) → Add Server → Dashboard.
+
+**5. Run supervised**:
+
+```bash
+nexus-agent start       # daemon + auto-reconnect
+nexus-agent status      # verify
+```
+
+After pairing, the app reconnects automatically with the stored E2E keys — no
+URL, token, or certificate configuration on the device.
 
 ## Repository Layout
 
 ```
 relay/
 ├── relay_server.py    # public WebSocket relay (routes encrypted bytes)
-├── relay_agent.py     # agent-side client (pairing + Dashboard bridge)
+├── relay_agent.py     # agent-side client (pairing + Dashboard bridge, --daemon)
+├── nexus_agent_cli.py # nexus-agent CLI (setup/pair/start/status/stop/update)
 ├── crypto.py          # X25519 + ChaCha20-Poly1305 + HKDF (pynacl)
 ├── deploy-relay.sh    # install/upgrade script for the server
+├── install-agent.sh   # one-command agent CLI installer
 └── README.md
 
 apps/iosApp/iosApp/
 ├── RelayClient.swift  # WebSocket client: pairing + E2E JSON-RPC
 ├── E2ECrypto.swift    # CryptoKit implementation of the same crypto
-├── PairingView.swift  # 6-digit pairing UI
+├── PairingView.swift  # pairing UI + QR generation
 └── ...                # SwiftUI views (Inbox, Agents, Sessions, Automations)
 
 docs/
