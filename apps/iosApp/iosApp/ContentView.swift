@@ -73,7 +73,7 @@ struct ContentView: View {
         NavigationStack {
             ZStack {
                 NexusStyle.background.ignoresSafeArea()
-                if isConnected {
+                if !relay.servers.isEmpty {
                     appHome
                 } else {
                     connectView
@@ -138,14 +138,18 @@ struct ContentView: View {
     }
 
     private var connectView: some View {
-        // C6: legacy direct-connection UI removed. When the relay is not yet
-        // connected we show a lightweight connecting state.
+        // No servers configured — point the user at Add Server (via the
+        // PairingView/NexusApp flow) rather than an eternal spinner.
         VStack(spacing: 16) {
             mobileTopBar(title: "Nexus", subtitle: "Agent Control Surface")
             Spacer()
-            ProgressView()
-                .tint(NexusStyle.blue)
-            Text("Connecting to relay…")
+            Image(systemName: "server.rack")
+                .font(.system(size: 40))
+                .foregroundStyle(NexusStyle.subtleText)
+            Text("No servers yet")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(NexusStyle.text)
+            Text("Add a server to start")
                 .font(.system(size: 14))
                 .foregroundStyle(NexusStyle.muted)
             Spacer()
@@ -192,6 +196,9 @@ struct ContentView: View {
                 .padding(.horizontal, 18)
                 .padding(.top, 10)
                 .padding(.bottom, 112)
+            }
+            .refreshable {
+                await loadHomeViaWS()
             }
             commandBar
         }
@@ -422,7 +429,7 @@ struct ContentView: View {
     private var segmentedRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(["Inbox", "Agents", "Sessions", "Automations", "Artifacts"], id: \.self) { item in
+                ForEach(["Inbox", "Agents", "Sessions", "Automations"], id: \.self) { item in
                     Button {
                         selectedSection = item
                     } label: {
@@ -1981,12 +1988,15 @@ struct ContentView: View {
                     let messageCount = dict["message_count"] as? Int ?? 0
                     let startedAt = dict["started_at"] as? Double ?? 0
                     let dateStr = String(format: "%.3f", startedAt)
+                    // Map the REAL status so Inbox "Active Tasks" (running)
+                    // can actually populate instead of always showing empty.
+                    let status = (dict["status"] as? String) ?? "recent"
                     return SessionSummary(
                         id: id,
                         title: title,
                         preview: preview,
                         messageCount: messageCount,
-                        status: "recent",
+                        status: status,
                         createdAt: dateStr,
                         updatedAt: dateStr
                     )
@@ -2015,20 +2025,58 @@ struct ContentView: View {
                 )
             }
 
-            // Build persistent agents from sessions
-            let newPersistentAgents = newSessions.prefix(5).compactMap { s -> PersistentAgent? in
-                guard !s.id.isEmpty else { return nil }
-                return PersistentAgent(
-                    id: s.id,
-                    name: s.title,
-                    description: s.preview.isEmpty ? "Latest conversation" : s.preview,
-                    icon: "cpu",
-                    capabilities: [],
-                    linkedSessionIds: [s.id],
-                    createdAt: s.createdAt,
-                    updatedAt: s.updatedAt,
-                    lastMessageAt: s.updatedAt
-                )
+            // Fetch real agents (agents.list is allowlisted); fall back to
+            // recent-sessions mapping only if the RPC is unavailable.
+            var newPersistentAgents: [PersistentAgent] = []
+            if let agentsResult = try? await relay.call("agents.list", params: [:]),
+               let agentsArray = (agentsResult as? [String: Any])?["agents"] as? [[String: Any]] {
+                newPersistentAgents = agentsArray.compactMap { dict in
+                    guard let id = dict["id"] as? String, !id.isEmpty else { return nil }
+                    return PersistentAgent(
+                        id: id,
+                        name: dict["name"] as? String ?? "Agent",
+                        description: dict["description"] as? String ?? dict["preview"] as? String ?? "",
+                        icon: dict["icon"] as? String ?? "cpu",
+                        capabilities: (dict["capabilities"] as? [String]) ?? [],
+                        linkedSessionIds: (dict["session_ids"] as? [String]) ?? [],
+                        createdAt: dict["created_at"] as? String ?? "",
+                        updatedAt: dict["updated_at"] as? String ?? "",
+                        lastMessageAt: dict["last_message_at"] as? String
+                    )
+                }
+            }
+            if newPersistentAgents.isEmpty {
+                newPersistentAgents = newSessions.prefix(5).compactMap { s -> PersistentAgent? in
+                    guard !s.id.isEmpty else { return nil }
+                    return PersistentAgent(
+                        id: s.id,
+                        name: s.title,
+                        description: s.preview.isEmpty ? "Latest conversation" : s.preview,
+                        icon: "cpu",
+                        capabilities: [],
+                        linkedSessionIds: [s.id],
+                        createdAt: s.createdAt,
+                        updatedAt: s.updatedAt,
+                        lastMessageAt: s.updatedAt
+                    )
+                }
+            }
+
+            // Fetch approvals (approval.list is allowlisted on the agent)
+            var newApprovals: [ApprovalInfo] = []
+            if let approvalResult = try? await relay.call("approval.list", params: [:]),
+               let approvalsArray = (approvalResult as? [String: Any])?["approvals"] as? [[String: Any]] {
+                newApprovals = approvalsArray.compactMap { dict in
+                    ApprovalInfo(
+                        id: dict["id"] as? String ?? UUID().uuidString,
+                        toolName: dict["tool_name"] as? String ?? dict["tool"] as? String ?? "",
+                        command: dict["command"] as? String ?? "",
+                        title: dict["title"] as? String,
+                        summary: dict["summary"] as? String ?? dict["detail"] as? String,
+                        status: dict["status"] as? String ?? "pending",
+                        createdAt: dict["created_at"] as? String ?? ""
+                    )
+                }
             }
 
             // Update UI on main thread
@@ -2036,7 +2084,7 @@ struct ContentView: View {
                 self.sessions = newSessions
                 self.cronJobs = newCronJobs
                 self.persistentAgents = newPersistentAgents
-                self.approvalList = []
+                self.approvalList = newApprovals
 
                 self.isLoadingSessions = false
                 self.isLoadingCron = false
@@ -2201,8 +2249,11 @@ struct ContentView: View {
         let url = editServerUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
         isAddingAgent = true
-        // Update server locally — no WebSocket RPC for updating remote agent servers
-        let updated = AgentInfo(
+        // Update the REAL relay server profile (persisted via ServerStore) —
+        // the legacy `agents` array is dead in the relay architecture.
+        relay.updateServer(serverID: server.id, relayURL: url.isEmpty ? nil : url, name: name)
+        // Reflect the change in the dashboard header
+        selectedAgentServer = AgentInfo(
             id: server.id,
             name: name,
             baseUrl: url.isEmpty ? server.baseUrl : url,
@@ -2212,10 +2263,6 @@ struct ContentView: View {
             createdAt: server.createdAt,
             lastSeenAt: server.lastSeenAt
         )
-        if let idx = agents.firstIndex(where: { $0.id == server.id }) {
-            agents[idx] = updated
-        }
-        selectedAgentServer = updated
         isShowingEditServer = false
         statusMessage = "Updated \(name)"
         isAddingAgent = false

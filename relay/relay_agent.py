@@ -389,7 +389,8 @@ class MobileRelayClient:
         allowed = {
             "session.list", "session.resume", "session.history", "session.status",
             "session.create", "session.interrupt", "prompt.submit", "approval.respond",
-            "cron.manage", "agents.list", "model.options", "tools.list", "toolsets.list",
+            "approval.list", "cron.manage", "agents.list", "model.options",
+            "tools.list", "toolsets.list",
         }
         if method not in allowed:
             log.warning("blocked method: %s", method)
