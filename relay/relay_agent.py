@@ -480,7 +480,12 @@ def main():
     parser.add_argument("--dashboard", default=default_dash, help="Hermes Dashboard WS URL (or set HERMES_DASHBOARD_WS)")
     parser.add_argument("--pair", action="store_true", help="Generate pairing code")
     parser.add_argument("--code", default=None, help="Use specific pairing code (8-char alphanumeric, e.g. K7mP2xQ9)")
+    parser.add_argument("--daemon", action="store_true", help="Detach into the background (nexus-agent internal)")
+    parser.add_argument("--log-file", default=None, help="Write logs to this file (nexus-agent internal)")
     args = parser.parse_args()
+
+    if args.daemon:
+        _daemonize(args)
 
     client = MobileRelayClient(args.relay, args.dashboard)
 
@@ -500,6 +505,37 @@ def main():
         asyncio.run(client.pair_and_run(code))
     else:
         asyncio.run(client.run())
+
+
+def _daemonize(args) -> None:
+    """Detach into the background (double-fork) when --daemon is passed.
+
+    Redirects stdout/stderr to the log file; the parent exits immediately
+    so the calling shell/nexus-agent sees a clean return.
+    """
+    log_path = args.log_file or str(Path.home() / ".hermes" / "mobile-agent.log")
+    log_dir = os.path.dirname(log_path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+    # First fork
+    if os.fork() > 0:
+        os._exit(0)
+    os.setsid()
+    # Second fork (prevents re-acquiring a controlling terminal)
+    if os.fork() > 0:
+        os._exit(0)
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # Re-point logging at the file
+    fh = logging.FileHandler(log_path)
+    fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    log.handlers = [fh]
+    log_file = open(log_path, "a")
+    sys.stdout = log_file
+    sys.stderr = log_file
+    log.info("daemonized, log: %s", log_path)
 
 
 if __name__ == "__main__":

@@ -65,6 +65,24 @@ struct PairingView: View {
                         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.blue.opacity(0.6), lineWidth: 1.5))
                 }
 
+                // Pairing QR — the agent shows 'nexus-agent pair'; scanning
+                // the code pre-fills relay + code + name on this phone.
+                if let qr = pairingQR {
+                    VStack(spacing: 8) {
+                        Image(uiImage: qr)
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 168, height: 168)
+                            .padding(8)
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        Text("Scan on the agent side (nexus-agent pair --qr) or type the code")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+
                 if isError {
                     Text(errorMessage)
                         .font(.system(size: 13))
@@ -109,6 +127,38 @@ struct PairingView: View {
     private var canAdd: Bool {
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
         return !relayUrl.isEmpty && trimmedCode.count >= 8
+    }
+
+    /// QR payload: nexus://<relay>?code=<CODE>&name=<name>
+    /// The agent's 'nexus-agent pair --qr <payload>' consumes this.
+    private var pairingQR: UIImage? {
+        let trimmedRelay = relayUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedRelay.isEmpty, trimmedCode.count >= 8 else { return nil }
+        let name = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Normalize so the QR is nexus://<host/path> — strip any scheme the
+        // relay field already carries (the agent re-adds wss://).
+        var relayPart = trimmedRelay
+        for scheme in ["wss://", "ws://"] {
+            if relayPart.hasPrefix(scheme) {
+                relayPart = String(relayPart.dropFirst(scheme.count))
+                break
+            }
+        }
+        var payload = "nexus://\(relayPart)?code=\(trimmedCode)"
+        if !name.isEmpty {
+            payload += "&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name)"
+        }
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(Data(payload.utf8), forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        guard let output = filter.outputImage else { return nil }
+        // Upscale to a crisp 336pt image
+        let transform = CGAffineTransform(scaleX: 14, y: 14)
+        let scaled = output.transformed(by: transform)
+        let context = CIContext()
+        guard let cg = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cg)
     }
 
     private var isDebugBuild: Bool {
