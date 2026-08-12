@@ -328,7 +328,17 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
             lock.lock()
             let cont = pending.removeValue(forKey: id)
             lock.unlock()
-            cont?.resume(returning: rpc["result"] ?? [:])
+            let result = rpc["result"] ?? [:]
+            // The relay agent returns {"error": "..."} INSIDE result for
+            // blocked/failed methods. Surface it as an error instead of
+            // letting callers treat failure as success.
+            if let resultDict = result as? [String: Any],
+               let errMsg = resultDict["error"] as? String {
+                cont?.resume(throwing: NSError(domain: "Nexus", code: 4,
+                                               userInfo: [NSLocalizedDescriptionKey: errMsg]))
+            } else {
+                cont?.resume(returning: result)
+            }
         }
     }
 

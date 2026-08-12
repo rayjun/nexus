@@ -1296,14 +1296,13 @@ struct ContentView: View {
 
     private var commandBar: some View {
         Button {
-            newAgentName = ""
-            newAgentDesc = ""
-            isShowingCreateAgent = true
+            // New Session is the primary action (goalComposer sheet).
+            isShowingComposer = true
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "plus")
                     .font(.system(size: 14, weight: .semibold))
-                Text("New Agent")
+                Text("New Session")
                     .font(.system(size: 15, weight: .semibold))
             }
             .foregroundStyle(.white)
