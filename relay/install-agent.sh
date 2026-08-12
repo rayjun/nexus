@@ -49,13 +49,13 @@ if [ ! -x "$INSTALL_DIR/venv/bin/python" ]; then
     python3 -m venv "$INSTALL_DIR/venv"
 fi
 echo "==> Installing dependencies…"
-"$INSTALL_DIR/venv/bin/pip" install -q --disable-pip-version-check \
+env -u PYTHONPATH "$INSTALL_DIR/venv/bin/pip" install -q --disable-pip-version-check \
     websockets pynacl pyyaml
 
 # --- CLI shim ---------------------------------------------------------------
 mkdir -p "$BIN_DIR"
 cat > "$INSTALL_DIR/venv/bin/nexus-agent" <<SHIM
-#!/usr/bin/env python3
+#!$INSTALL_DIR/venv/bin/python
 import os, sys
 sys.path.insert(0, "$INSTALL_DIR/relay/relay")
 from nexus_agent_cli import main

@@ -29,7 +29,10 @@ RELAY_DIR = Path(__file__).resolve().parent
 if str(RELAY_DIR) not in sys.path:
     sys.path.insert(0, str(RELAY_DIR))
 
-CONFIG_DIR = Path.home() / ".nexus"
+# Allow NEXUS_INSTALL_DIR to override the default location (used by
+# install-agent.sh and for test isolation).
+_INSTALL_DIR = os.environ.get("NEXUS_INSTALL_DIR") or str(Path.home() / ".nexus")
+CONFIG_DIR = Path(_INSTALL_DIR)
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
 LOG_PATH = Path.home() / ".hermes" / "mobile-agent.log"
 PID_PATH = CONFIG_DIR / "agent.pid"
