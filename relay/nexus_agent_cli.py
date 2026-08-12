@@ -169,8 +169,34 @@ def cmd_pair(args) -> int:
 
     log(f"Relay: {relay}")
     log(f"Pairing code: {code}")
-    log("Waiting for the app… (leave this terminal open)")
+    # Show a QR the phone can scan: nexus://<relay>?code=<CODE>[&name=<NAME>]
+    _print_pairing_qr(relay, code)
+    log("Waiting for the app… (scan the QR above or enter the code manually)")
     return _run_foreground(relay, code, dash)
+
+
+def _print_pairing_qr(relay: str, code: str, name: str = "") -> None:
+    """Render the pairing payload as an ASCII QR in the terminal.
+
+    The phone's Pairing screen can scan this to pre-fill relay + code.
+    qrcode is an optional dependency — fall back to the plain code.
+    """
+    try:
+        from urllib.parse import quote
+        import qrcode  # type: ignore
+
+        payload = f"nexus://{relay}?code={code}"
+        if name:
+            payload += f"&name={quote(name)}"
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(payload)
+        qr.make(fit=True)
+        print("\n")
+        qr.print_ascii(invert=True)
+        print(f"\n  Phone: scan the QR above, or type code {code}\n")
+    except Exception:
+        # No qrcode installed — plain text still works.
+        print(f"\n  Phone: enter code {code} (relay {relay})\n")
 
 
 def cmd_start(args) -> int:

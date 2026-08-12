@@ -7,6 +7,7 @@ struct PairingView: View {
     @State private var isError = false
     @State private var errorMessage = ""
     @State private var isAdding = false
+    @State private var isShowingScanner = false
     @ObservedObject private var relay = RelayClient.shared
     @State private var pairingObserver: NSObjectProtocol?
 
@@ -89,6 +90,22 @@ struct PairingView: View {
                         .foregroundColor(.red)
                 }
 
+                // Scan the agent's terminal QR (nexus-agent pair) to
+                // pre-fill relay URL + code automatically.
+                Button(action: { isShowingScanner = true }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "qrcode.viewfinder")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Scan agent QR")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundColor(.blue)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
                 Button(action: startPairing) {
                     Text(isAdding ? "Adding…" : "Add Server")
                         .font(.system(size: 16, weight: .semibold))
@@ -121,6 +138,54 @@ struct PairingView: View {
                     ?? (Bundle.main.object(forInfoDictionaryKey: "NexusRelayURL") as? String)
                     ?? "wss://relay.example.com/relay"
             }
+        }
+        .sheet(isPresented: $isShowingScanner) {
+            QRScannerView(
+                onScan: { payload in
+                    isShowingScanner = false
+                    applyScannedPayload(payload)
+                },
+                onCancel: { isShowingScanner = false }
+            )
+            .ignoresSafeArea()
+        }
+    }
+
+    /// Parse a scanned nexus://<relay>?code=<CODE>[&name=<NAME>] payload and
+    /// pre-fill the form. Mirrors the agent's _parse_qr_payload.
+    private func applyScannedPayload(_ payload: String) {
+        guard let url = URL(string: payload), url.scheme == "nexus",
+              let host = url.host else {
+            isError = true
+            errorMessage = "Not a valid Nexus pairing QR"
+            return
+        }
+        // url.host excludes the scheme AND the port; url.path keeps the path
+        var hostPort = host
+        if let port = url.port {
+            hostPort += ":\(port)"
+        }
+        let relay = "wss://\(hostPort)\(url.path)"
+        if let comps = URLComponents(string: payload),
+           let codeValue = comps.queryItems?.first(where: { $0.name == "code" })?.value {
+            let trimmed = codeValue.uppercased()
+            guard trimmed.count >= 8,
+                  trimmed.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
+                isError = true
+                errorMessage = "Pairing code in QR is invalid"
+                return
+            }
+            code = trimmed
+            if let nameValue = comps.queryItems?.first(where: { $0.name == "name" })?.value,
+               !nameValue.isEmpty {
+                serverName = nameValue
+            }
+            relayUrl = relay
+            isError = false
+            errorMessage = ""
+        } else {
+            isError = true
+            errorMessage = "Pairing QR is missing the code"
         }
     }
 

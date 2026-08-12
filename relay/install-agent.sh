@@ -63,7 +63,7 @@ if [ ! -x "$INSTALL_DIR/venv/bin/python" ]; then
 fi
 echo "==> Installing dependencies…"
 env -u PYTHONPATH "$INSTALL_DIR/venv/bin/pip" install -q --disable-pip-version-check \
-    websockets pynacl pyyaml
+    -r "$INSTALL_DIR/relay/relay/requirements.txt"
 
 # --- CLI shim ---------------------------------------------------------------
 # The shim derives its paths at RUNTIME (no install-time interpolation), so

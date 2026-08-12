@@ -34,6 +34,8 @@
     </dict>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Nexus connects to your local or Tailscale Hermes Gateway.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Nexus uses the camera to scan the pairing QR shown by nexus-agent on your server.</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>UILaunchScreen</key>
