@@ -14,6 +14,8 @@ relay_agent.py's MobileRelayClient — this CLI only manages config, pairing
 and the background process.
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import signal
@@ -34,7 +36,7 @@ if str(RELAY_DIR) not in sys.path:
 _INSTALL_DIR = os.environ.get("NEXUS_INSTALL_DIR") or str(Path.home() / ".nexus")
 CONFIG_DIR = Path(_INSTALL_DIR)
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
-LOG_PATH = Path.home() / ".hermes" / "mobile-agent.log"
+LOG_PATH = CONFIG_DIR / "mobile-agent.log"
 PID_PATH = CONFIG_DIR / "agent.pid"
 AGENT_SCRIPT = RELAY_DIR / "relay_agent.py"
 
@@ -71,15 +73,32 @@ def read_pid() -> int | None:
         return None
 
 
+def _pid_is_agent(pid: int) -> bool:
+    """Verify the pid actually runs relay_agent.py --daemon (identity check).
+
+    Guards against a stale pidfile whose pid was reused by an unrelated
+    process — stop() must never SIGKILL a stranger.
+    """
+    try:
+        out = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True, text=True, timeout=3,
+        ).stdout
+        cmd = out.strip()
+        return "relay_agent.py" in cmd and "--daemon" in cmd
+    except Exception:
+        return False
+
+
 def is_running() -> bool:
     pid = read_pid()
     if pid is None:
         return False
     try:
         os.kill(pid, 0)
-        return True
     except OSError:
         return False
+    return _pid_is_agent(pid)
 
 
 # -------------------------------------------------------------- commands ---
@@ -107,7 +126,13 @@ def cmd_setup(args) -> int:
             # Explicit override (may be empty to clear)
             val = args.dashboard.strip()
         else:
-            val = input("Dashboard WS URL with token (HERMES_DASHBOARD_WS) []: ").strip() or cur
+            # Env-first: the dashboard WS URL carries a session token — it
+            # must not land in argv/ps/history when it can come from env.
+            env_val = os.environ.get("HERMES_DASHBOARD_WS", "")
+            if env_val:
+                val = env_val
+            else:
+                val = input("Dashboard WS URL with token (HERMES_DASHBOARD_WS) []: ").strip() or cur
         cfg["dashboard"] = val
     save_config(cfg)
     log(f"Saved config to {CONFIG_PATH}")
@@ -160,24 +185,29 @@ def cmd_start(args) -> int:
         return 0
     # Start the agent in the background via the venv's python
     python = _python_bin()
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    PID_PATH.unlink(missing_ok=True)  # drop any stale pidfile
     proc = subprocess.Popen(
-        [python, str(AGENT_SCRIPT), "--relay", relay, "--daemon", "--log-file", str(LOG_PATH)],
+        [python, str(AGENT_SCRIPT), "--relay", relay, "--daemon",
+         "--log-file", str(LOG_PATH), "--pidfile", str(PID_PATH)],
         env={**os.environ, "HERMES_DASHBOARD_WS": dash},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
-    # The daemon double-forks; wait for the real pid to appear
-    pid = proc.pid
+    # The daemon double-forks and writes ITS OWN pidfile; wait for it and
+    # verify identity (avoids recording the intermediate fork's pid).
+    pid = None
     for _ in range(50):
         time.sleep(0.1)
-        # Find the grandchild that holds the socket (daemon pid)
-        gpid = _find_agent_pid()
-        if gpid is not None:
-            pid = gpid
+        candidate = read_pid()
+        if candidate is not None and _pid_is_agent(candidate):
+            pid = candidate
             break
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    PID_PATH.write_text(str(pid))
+    if pid is None:
+        log("ERROR: daemon did not come up — last log lines:")
+        _tail_log()
+        return 1
     log(f"started (pid {pid}); logs: {LOG_PATH}")
     log("Run 'nexus-agent status' to check.")
     return 0
@@ -199,6 +229,11 @@ def cmd_stop(args) -> int:
     if pid is None:
         log("not running")
         return 0
+    # Identity check — never signal a pid that isn't our agent.
+    if not _pid_is_agent(pid):
+        log(f"pid {pid} is not the nexus agent (stale pidfile?) — removing pidfile")
+        PID_PATH.unlink(missing_ok=True)
+        return 0
     try:
         os.kill(pid, signal.SIGTERM)
     except OSError:
@@ -219,15 +254,34 @@ def cmd_stop(args) -> int:
     return 0
 
 
+def _tail_log(n: int = 20) -> None:
+    try:
+        lines = LOG_PATH.read_text().splitlines()[-n:]
+        for line in lines:
+            print(f"  {line}", file=sys.stderr)
+    except OSError:
+        print("  (no log file)", file=sys.stderr)
+
+
 def cmd_update(args) -> int:
     # Self-update: pull latest from the repo (works in a git checkout).
-    if not (RELAY_DIR / ".git").exists():
+    # The .git dir lives at the checkout root (RELAY_DIR.parent for both the
+    # source layout repo/relay/ and the installer's ~/.nexus/relay/relay/).
+    git_root = RELAY_DIR.parent
+    if not (git_root / ".git").exists():
         log("not a git checkout — update not supported; re-run the installer")
         return 1
     log("pulling latest…")
-    r = subprocess.run(["git", "-C", str(RELAY_DIR.parent), "pull", "--ff-only"], capture_output=True, text=True)
+    r = subprocess.run(["git", "-C", str(git_root), "fetch", "--depth", "1", "origin", "HEAD"],
+                       capture_output=True, text=True)
     if r.returncode != 0:
-        log(f"pull failed: {r.stderr.strip()}")
+        log(f"fetch failed: {r.stderr.strip()}")
+        return 1
+    # Reset to the fetched tip (works on detached HEAD, keeps sparse cone)
+    r = subprocess.run(["git", "-C", str(git_root), "reset", "--hard", "FETCH_HEAD"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        log(f"reset failed: {r.stderr.strip()}")
         return 1
     # Restart if running
     was_running = is_running()
@@ -273,11 +327,15 @@ def _parse_qr_payload(payload: str) -> tuple[str, str, str] | None:
             return None
         qs = parse_qs(u.query)
         codes = qs.get("code", [])
-        if not codes or not (8 <= len(codes[0]) <= 12):
+        if not codes:
+            return None
+        code = codes[0].upper()
+        # Same rule as cmd_setup/relay_agent: 8-12 alphanumeric (dashes ok)
+        if not (8 <= len(code) <= 12) or not code.replace("-", "").isalnum():
             return None
         relay = f"wss://{u.netloc}{u.path}"
         name = qs.get("name", [""])[0]
-        return relay, codes[0].upper(), name
+        return relay, code, name
     except Exception:
         return None
 
@@ -287,22 +345,6 @@ def _run_foreground(relay: str, code: str, dash: str) -> int:
     env = {**os.environ, "HERMES_DASHBOARD_WS": dash}
     r = subprocess.run([python, str(AGENT_SCRIPT), "--relay", relay, "--pair", "--code", code], env=env)
     return r.returncode
-
-
-def _find_agent_pid() -> int | None:
-    """Find the daemonized relay_agent process (child of this CLI's child)."""
-    try:
-        out = subprocess.run(
-            ["pgrep", "-f", "relay_agent.py --relay"],
-            capture_output=True, text=True, timeout=3,
-        ).stdout.strip()
-    except Exception:
-        return None
-    for line in out.splitlines():
-        pid = int(line)
-        if pid != os.getpid():
-            return pid
-    return None
 
 
 def main() -> int:

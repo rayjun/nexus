@@ -482,9 +482,13 @@ def main():
     parser.add_argument("--code", default=None, help="Use specific pairing code (8-char alphanumeric, e.g. K7mP2xQ9)")
     parser.add_argument("--daemon", action="store_true", help="Detach into the background (nexus-agent internal)")
     parser.add_argument("--log-file", default=None, help="Write logs to this file (nexus-agent internal)")
+    parser.add_argument("--pidfile", default=None, help="Write our pid here after daemonizing (nexus-agent internal)")
     args = parser.parse_args()
 
     if args.daemon:
+        if args.pair:
+            print("ERROR: --pair and --daemon are mutually exclusive", file=sys.stderr)
+            sys.exit(2)
         _daemonize(args)
 
     client = MobileRelayClient(args.relay, args.dashboard)
@@ -510,8 +514,10 @@ def main():
 def _daemonize(args) -> None:
     """Detach into the background (double-fork) when --daemon is passed.
 
-    Redirects stdout/stderr to the log file; the parent exits immediately
-    so the calling shell/nexus-agent sees a clean return.
+    Redirects stdin/stdout/stderr to the log file; the parent exits
+    immediately so the calling shell/nexus-agent sees a clean return.
+    Writes our pid to --pidfile (after the second fork) so supervisors can
+    verify identity instead of trusting a stale pidfile.
     """
     log_path = args.log_file or str(Path.home() / ".hermes" / "mobile-agent.log")
     log_dir = os.path.dirname(log_path)
@@ -526,6 +532,10 @@ def _daemonize(args) -> None:
     if os.fork() > 0:
         os._exit(0)
 
+    if args.pidfile:
+        Path(args.pidfile).write_text(str(os.getpid()))
+
+    sys.stdin = open(os.devnull)
     sys.stdout.flush()
     sys.stderr.flush()
     # Re-point logging at the file
