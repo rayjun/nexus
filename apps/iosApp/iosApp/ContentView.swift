@@ -2301,6 +2301,11 @@ struct ContentView: View {
     }
 
     private func clearPairing() {
+        // "Disconnect": remove ALL servers (disconnect + clear E2E keys +
+        // clear ServerStore) so the app returns to the Add Server screen.
+        // Without removing servers, RelayClient.init would reconnect them on
+        // next launch — Disconnect would not persist.
+        relay.removeAllServers()
         deviceId = ""
         deviceToken = ""
         KeychainHelper.delete(key: "device_id")
@@ -2310,8 +2315,6 @@ struct ContentView: View {
         resumedSessionIds = [:]
         agentMessages = []
         selectedTimeline = nil
-        relay.disconnect()
-        
         agents = []
         nodeName = ""
         statusMessage = "Disconnected"

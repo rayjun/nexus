@@ -116,6 +116,17 @@ final class RelayClient: NSObject, ObservableObject {
         }
     }
 
+    /// Disconnect and forget every server (used by "Disconnect" — returns
+    /// the app to the Add Server screen; next launch starts clean).
+    func removeAllServers() {
+        for id in Array(connections.keys) {
+            removeServer(serverID: id)
+        }
+        servers = []
+        ServerStore.save([])
+        activeServerID = nil
+    }
+
     func setActive(serverID: String) {
         activeServerID = serverID
         connect(serverID: serverID)

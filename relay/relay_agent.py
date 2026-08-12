@@ -388,8 +388,8 @@ class MobileRelayClient:
         # that expose secrets or grant control beyond chat/approvals.
         allowed = {
             "session.list", "session.resume", "session.history", "session.status",
-            "session.interrupt", "prompt.submit", "approval.respond", "cron.manage",
-            "agents.list", "model.options", "tools.list", "toolsets.list",
+            "session.create", "session.interrupt", "prompt.submit", "approval.respond",
+            "cron.manage", "agents.list", "model.options", "tools.list", "toolsets.list",
         }
         if method not in allowed:
             log.warning("blocked method: %s", method)
