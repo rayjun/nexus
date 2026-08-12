@@ -75,8 +75,10 @@ mkdir -p "$BIN_DIR"
 cat > "$INSTALL_DIR/venv/bin/nexus-agent" <<SHIM
 #!$INSTALL_DIR/venv/bin/python
 import os, sys
-# This file lives at <install>/venv/bin/nexus-agent
-_install = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# This file lives at <install>/venv/bin/nexus-agent:
+#   dirname x2 -> <install>/venv ; parent of that -> <install>
+_bin = os.path.dirname(os.path.abspath(__file__))
+_install = os.path.dirname(os.path.dirname(_bin))
 sys.path.insert(0, os.path.join(_install, "relay", "relay"))
 from nexus_agent_cli import main
 sys.exit(main())
