@@ -370,8 +370,19 @@ def _parse_qr_payload(payload: str) -> tuple[str, str, str] | None:
         # Same rule as cmd_setup/relay_agent: 8-12 alphanumeric (dashes ok)
         if not (8 <= len(code) <= 12) or not code.replace("-", "").isalnum():
             return None
-        relay = f"wss://{u.netloc}{u.path}"
-        name = qs.get("name", [""])[0]
+        # Reject userinfo: a crafted 'nexus://user:pass@evil.com' must not
+        # put credentials into the relay URL (or the log line that echoes it).
+        if "@" in u.netloc:
+            return None
+        # u.hostname strips IPv6 brackets in some Python versions; re-add
+        # them when the host is a bare IPv6 literal (contains multiple ':').
+        host = u.hostname or ""
+        if not host:
+            return None
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        relay = f"wss://{host}" + (f":{u.port}" if u.port else "") + u.path
+        name = qs.get("name", [""])[0].strip()[:64]
         return relay, code, name
     except Exception:
         return None

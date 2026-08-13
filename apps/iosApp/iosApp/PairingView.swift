@@ -207,7 +207,7 @@ struct PairingView: View {
             errorMessage = "Pairing code in QR is invalid"
             return
         }
-        let name = comps.queryItems?.first(where: { $0.name == "name" })?.value ?? ""
+        let name = String((comps.queryItems?.first(where: { $0.name == "name" })?.value ?? "").prefix(64))
         // Show the confirmation alert before anything is applied.
         pendingScan = ScannedPairing(relay: relay, code: trimmed, name: name)
         isShowingConfirmAlert = true
