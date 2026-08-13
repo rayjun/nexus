@@ -96,6 +96,15 @@ struct ContentView: View {
                 relay.connect(serverID: serverID)
             }
         }
+        .onChange(of: scenePhase) { phase in
+            // Returning to the foreground: refresh home data (sessions,
+            // approvals, cron) — the app cannot receive anything while
+            // backgrounded (URLSession is suspended), so approvals that
+            // arrived while away are only visible after this reload.
+            if phase == .active, !relay.servers.isEmpty {
+                Task { await loadHomeViaWS() }
+            }
+        }
         .onChange(of: relay.isConnected) { connected in
             if connected && agents.isEmpty {
                 Task { await loadHomeViaWS() }
@@ -189,6 +198,26 @@ struct ContentView: View {
                         editServerName = agent.name
                         editServerUrl = agent.baseUrl
                         isShowingEditServer = true
+                    }
+                    // Pending approvals callout — a tap jumps to the Inbox
+                    // (which hosts the APPROVALS section). Visible
+                    // immediately on return to foreground (scenePhase reload).
+                    if !approvalList.isEmpty {
+                        Button {
+                            selectedSection = "Inbox"
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                Text("\(approvalList.count) pending approval\(approvalList.count == 1 ? "" : "s") — tap to review")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.orange, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
                     }
                     segmentedRail
                     contentPanel

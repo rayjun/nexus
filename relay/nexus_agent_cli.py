@@ -218,6 +218,15 @@ def cmd_start(args) -> int:
     if is_running():
         log(f"already running (pid {read_pid()})")
         return 0
+    # Prefer a registered supervisor (launchd/systemd) — it restarts the
+    # agent on crash; the built-in daemon is the fallback.
+    sup = _supervisor()
+    if sup is not None:
+        log(f"starting via supervisor ({sup})…")
+        rc = _supervisor_control(sup, "start")
+        if rc == 0:
+            return 0
+        log("supervisor start failed — falling back to built-in daemon")
     # Start the agent in the background via the venv's python
     python = _python_bin()
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -260,6 +269,10 @@ def cmd_status(args) -> int:
 
 
 def cmd_stop(args) -> int:
+    # Stop via supervisor first when registered
+    sup = _supervisor()
+    if sup is not None:
+        _supervisor_control(sup, "stop")
     pid = read_pid()
     if pid is None:
         log("not running")
@@ -338,6 +351,56 @@ def _python_bin() -> str:
     if py.exists():
         return str(py)
     return sys.executable
+
+
+# ------------------------------------------------------------- supervisor ---
+
+def _supervisor() -> str | None:
+    """Detect a registered supervisor: 'launchd' or 'systemd', else None."""
+    if (Path.home() / "Library" / "LaunchAgents" / "com.rayjun.nexus-agent.plist").exists():
+        return "launchd"
+    if (Path.home() / ".config" / "systemd" / "user" / "nexus-agent.service").exists():
+        return "systemd"
+    return None
+
+
+def _supervisor_control(kind: str, action: str) -> int:
+    """start/stop the agent through launchd or systemd (returns exit code)."""
+    if kind == "launchd":
+        label = "com.rayjun.nexus-agent"
+        if action == "start":
+            r = subprocess.run(["launchctl", "kickstart", f"gui/{os.getuid()}/{label}"],
+                               capture_output=True)
+            return r.returncode
+        if action == "stop":
+            r = subprocess.run(["launchctl", "kill", "TERM", f"gui/{os.getuid()}/{label}"],
+                               capture_output=True)
+            return r.returncode
+    if kind == "systemd":
+        r = subprocess.run(["systemctl", "--user", action, "nexus-agent"], capture_output=True)
+        return r.returncode
+    return 1
+
+
+def cmd_run_supervised(args) -> int:
+    """Entry point used by launchd/systemd: run the agent in the FOREGROUND
+    (the supervisor manages restarts; relay_agent's internal loop handles
+    connection-level reconnects)."""
+    cfg = load_config()
+    relay = cfg.get("relay")
+    dash = cfg.get("dashboard") or os.environ.get("HERMES_DASHBOARD_WS", "")
+    if not relay:
+        log("ERROR: no relay configured — run 'nexus-agent setup' first")
+        return 1
+    import asyncio
+    import relay_agent  # same directory (RELAY_DIR is already on sys.path)
+    client = relay_agent.MobileRelayClient(relay, dash)
+    if client.is_paired:
+        asyncio.run(client.run())
+    else:
+        log("not paired yet — run 'nexus-agent pair' first")
+        return 1
+    return 0
 
 
 def _parse_qr_payload(payload: str) -> tuple[str, str, str] | None:
@@ -425,6 +488,9 @@ def main() -> int:
 
     p_update = sub.add_parser("update", help="pull latest code and restart")
     p_update.set_defaults(func=cmd_update)
+
+    p_sup = sub.add_parser("run-supervised", help="[internal] foreground run for launchd/systemd")
+    p_sup.set_defaults(func=cmd_run_supervised)
 
     args = parser.parse_args()
     return args.func(args)

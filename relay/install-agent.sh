@@ -86,10 +86,58 @@ SHIM
 chmod +x "$INSTALL_DIR/venv/bin/nexus-agent"
 ln -sf "$INSTALL_DIR/venv/bin/nexus-agent" "$BIN_DIR/nexus-agent"
 
+# --- Supervisor (crash-restart) ---------------------------------------------
+# Register a system-level supervisor so the agent survives crashes. The CLI
+# prefers this over its built-in daemon when present.
+if [ -d "$HOME/Library/LaunchAgents" ] && [ ! -f "$HOME/Library/LaunchAgents/com.rayjun.nexus-agent.plist" ]; then
+    echo "==> Registering launchd agent (macOS)…"
+    mkdir -p "$HOME/Library/LaunchAgents"
+    cat > "$HOME/Library/LaunchAgents/com.rayjun.nexus-agent.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.rayjun.nexus-agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$INSTALL_DIR/venv/bin/nexus-agent</string>
+        <string>run-supervised</string>
+    </array>
+    <key>KeepAlive</key><true/>
+    <key>RunAtLoad</key><false/>
+    <key>StandardOutPath</key><string>$INSTALL_DIR/launchd.out.log</string>
+    <key>StandardErrorPath</key><string>$INSTALL_DIR/launchd.err.log</string>
+</dict>
+</plist>
+PLIST
+    launchctl unload "$HOME/Library/LaunchAgents/com.rayjun.nexus-agent.plist" 2>/dev/null || true
+    launchctl load "$HOME/Library/LaunchAgents/com.rayjun.nexus-agent.plist"
+fi
+if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files >/dev/null 2>&1 \
+   && [ ! -f "$HOME/.config/systemd/user/nexus-agent.service" ]; then
+    echo "==> Registering systemd user unit (Linux)…"
+    mkdir -p "$HOME/.config/systemd/user"
+    cat > "$HOME/.config/systemd/user/nexus-agent.service" <<UNIT
+[Unit]
+Description=Nexus mobile agent (E2E relay bridge)
+After=network-online.target
+
+[Service]
+ExecStart=$INSTALL_DIR/venv/bin/nexus-agent run-supervised
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+UNIT
+    systemctl --user daemon-reload
+    systemctl --user enable nexus-agent.service
+fi
+
 echo ""
 echo "==> Installed. Next steps:"
 echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
 echo "    nexus-agent setup      # relay URL + pairing code"
 echo "    nexus-agent pair       # wait for the app"
-echo "    nexus-agent start      # run in the background"
+echo "    nexus-agent start      # start (supervised — survives crashes)"
 echo ""

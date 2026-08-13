@@ -52,6 +52,9 @@ JOIN_RATE_WINDOW = 60  # seconds
 # Security: cap total channels to bound memory — an unauthenticated attacker
 # could otherwise create a Channel per random channel_id (memory DoS).
 MAX_CHANNELS = 10000
+# Security: cap single-message payloads (base64 JSON-RPC in practice is
+# well under 64KB; 1MB is generous for large session histories).
+MAX_PAYLOAD = 1 * 1024 * 1024
 # Security: per-connection message rate limit on the forward path (anti-flood).
 MSG_RATE_LIMIT = 60  # messages per second per connection
 MSG_RATE_BURST = 120  # burst allowance
@@ -302,6 +305,13 @@ class RelayServer:
                     payload = msg.get("payload", "")
                     if not channel_id or not payload:
                         continue
+                    # Cap payload size: a hostile/buggy client must not be
+                    # able to push unbounded frames through the relay
+                    # (memory amplification + forward amplification).
+                    if len(payload) > MAX_PAYLOAD:
+                        log.warning("oversized payload (%d bytes) — closing", len(payload))
+                        await ws.close(code=1009, reason="payload too large")
+                        return
                     await self.forward(ws, channel_id, payload)
                 else:
                     await ws.send(json.dumps({"type": "error", "message": f"unknown type: {mtype}"}))
