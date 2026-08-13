@@ -185,7 +185,16 @@ def _print_pairing_qr(relay: str, code: str, name: str = "") -> None:
         from urllib.parse import quote
         import qrcode  # type: ignore
 
-        payload = f"nexus://{relay}?code={code}"
+        # Strip any wss://|ws:// scheme the relay already carries — the
+        # payload's netloc must be scheme-free (the phone re-adds wss://;
+        # an embedded scheme would parse as host='wss' on iOS).
+        relay_part = relay
+        relay_lower = relay_part.lower()
+        for scheme in ("wss://", "ws://"):
+            if relay_lower.startswith(scheme):
+                relay_part = relay_part[len(scheme):]
+                break
+        payload = f"nexus://{relay_part}?code={code}"
         if name:
             payload += f"&name={quote(name)}"
         qr = qrcode.QRCode(border=1)
@@ -341,11 +350,13 @@ def _parse_qr_payload(payload: str) -> tuple[str, str, str] | None:
     try:
         from urllib.parse import parse_qs, urlparse
         # Normalize an embedded scheme: nexus://wss://host/path -> nexus://host/path
+        # Case-insensitive prefix matching (WSS:// slips through otherwise).
         norm = payload
         if "://" in norm:
             prefix, rest = norm.split("://", 1)
+            rest_l = rest.lower()
             for inner in ("wss://", "ws://"):
-                if prefix == "nexus" and rest.startswith(inner):
+                if prefix == "nexus" and rest_l.startswith(inner):
                     norm = f"nexus://{rest[len(inner):]}"
                     break
         u = urlparse(norm)

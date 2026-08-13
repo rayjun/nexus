@@ -538,14 +538,16 @@ def _daemonize(args) -> None:
     sys.stdin = open(os.devnull)
     sys.stdout.flush()
     sys.stderr.flush()
-    # Re-point logging at the file
-    fh = logging.FileHandler(log_path)
+    # Rotating log: 5MB x 3 backups — the daemon runs for weeks; a single
+    # unbounded append-only file would grow without limit.
+    from logging.handlers import RotatingFileHandler
+    fh = RotatingFileHandler(log_path, maxBytes=5 * 1024 * 1024, backupCount=3)
     fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     log.handlers = [fh]
     log_file = open(log_path, "a")
     sys.stdout = log_file
     sys.stderr = log_file
-    log.info("daemonized, log: %s", log_path)
+    log.info("daemonized, log: %s (5MB x 3 rotating)", log_path)
 
 
 if __name__ == "__main__":

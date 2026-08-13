@@ -8,8 +8,6 @@ struct QRScannerView: UIViewControllerRepresentable {
     let onScan: (String) -> Void
     let onCancel: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onScan: onScan) }
-
     func makeUIViewController(context: Context) -> QRScannerController {
         let vc = QRScannerController()
         vc.onScan = { payload in
@@ -20,11 +18,6 @@ struct QRScannerView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: QRScannerController, context: Context) {}
-
-    final class Coordinator {
-        let onScan: (String) -> Void
-        init(onScan: @escaping (String) -> Void) { self.onScan = onScan }
-    }
 }
 
 /// AVCaptureSession-backed scanner with a simple camera preview + close button.
@@ -38,8 +31,27 @@ final class QRScannerController: UIViewController, AVCaptureMetadataOutputObject
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        setupCamera()
         setupCloseButton()
+        // Explicit permission handling: request on .notDetermined, guide to
+        // Settings on .denied/.restricted instead of a dead black screen.
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            setupCamera()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        self?.setupCamera()
+                    } else {
+                        self?.showPermissionDenied()
+                    }
+                }
+            }
+        case .denied, .restricted:
+            showPermissionDenied()
+        @unknown default:
+            setupCamera()
+        }
     }
 
     private func setupCamera() {
@@ -85,16 +97,6 @@ final class QRScannerController: UIViewController, AVCaptureMetadataOutputObject
 
     @objc private func closeTapped() { onCancel?() }
 
-    func metadataOutput(_ output: AVCaptureMetadataOutput,
-                        didOutput metadataObjects: [AVMetadataObject],
-                        from connection: AVCaptureConnection) {
-        guard let obj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
-              obj.type == .qr,
-              let value = obj.stringValue else { return }
-        captureSession?.stopRunning()
-        onScan?(value)
-    }
-
     private func showError(_ message: String) {
         let label = UILabel()
         label.text = message
@@ -106,6 +108,64 @@ final class QRScannerController: UIViewController, AVCaptureMetadataOutputObject
             label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
         ])
+    }
+
+    /// Camera permission denied — explain and offer a Settings deep-link.
+    private func showPermissionDenied() {
+        let container = UIStackView()
+        container.axis = .vertical
+        container.spacing = 14
+        container.alignment = .center
+        container.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(container)
+        NSLayoutConstraint.activate([
+            container.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            container.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            container.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 32),
+            container.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -32),
+        ])
+
+        let label = UILabel()
+        label.text = "Camera access is needed to scan the pairing QR.\nEnable it in Settings."
+        label.textColor = .white
+        label.textAlignment = .center
+        label.numberOfLines = 0
+        container.addArrangedSubview(label)
+
+        let btn = UIButton(type: .system)
+        btn.setTitle("Open Settings", for: .normal)
+        btn.tintColor = .white
+        btn.backgroundColor = UIColor.white.withAlphaComponent(0.15)
+        btn.layer.cornerRadius = 12
+        btn.contentEdgeInsets = UIEdgeInsets(top: 10, left: 18, bottom: 10, right: 18)
+        btn.addTarget(self, action: #selector(openSettings), for: .touchUpInside)
+        container.addArrangedSubview(btn)
+    }
+
+    @objc private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private var didDeliver = false
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput,
+                        didOutput metadataObjects: [AVMetadataObject],
+                        from connection: AVCaptureConnection) {
+        // Double-scan guard: callbacks enqueued before stopRunning() can
+        // still deliver; deliver exactly once.
+        guard !didDeliver else { return }
+        guard let obj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+              obj.type == .qr,
+              let value = obj.stringValue else { return }
+        didDeliver = true
+        captureSession?.stopRunning()
+        onScan?(value)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
     }
 
     override func viewWillDisappear(_ animated: Bool) {

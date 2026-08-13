@@ -143,50 +143,86 @@ struct PairingView: View {
             QRScannerView(
                 onScan: { payload in
                     isShowingScanner = false
-                    applyScannedPayload(payload)
+                    handleScannedPayload(payload)
                 },
                 onCancel: { isShowingScanner = false }
             )
             .ignoresSafeArea()
         }
+        .alert("Confirm relay", isPresented: $isShowingConfirmAlert) {
+            Button("Cancel", role: .cancel) { pendingScan = nil }
+            Button("Pair") {
+                if let parsed = pendingScan { fillForm(from: parsed) }
+                pendingScan = nil
+            }
+        } message: {
+            Text("Pair with relay:\n\(pendingScan?.relay ?? "")\n\nCode: \(pendingScan?.code ?? "")\nServer: \(pendingScan?.name ?? "(unnamed)")")
+        }
     }
 
-    /// Parse a scanned nexus://<relay>?code=<CODE>[&name=<NAME>] payload and
-    /// pre-fill the form. Mirrors the agent's _parse_qr_payload.
-    private func applyScannedPayload(_ payload: String) {
-        guard let url = URL(string: payload), url.scheme == "nexus",
+    @State private var isShowingConfirmAlert = false
+    private struct ScannedPairing: Equatable {
+        let relay: String
+        let code: String
+        let name: String
+    }
+    @State private var pendingScan: ScannedPairing?
+
+    /// Scan step 1: parse the payload; if valid, ask the user to CONFIRM the
+    /// relay before filling the form (a hostile QR must not silently point
+    /// the app at an attacker-controlled relay).
+    private func handleScannedPayload(_ payload: String) {
+        var normalized = payload
+        if normalized.lowercased().hasPrefix("nexus://") {
+            let body = String(normalized.dropFirst("nexus://".count))
+            let bodyLower = body.lowercased()
+            for inner in ["wss://", "ws://"] {
+                if bodyLower.hasPrefix(inner) {
+                    normalized = "nexus://" + String(body.dropFirst(inner.count))
+                    break
+                }
+            }
+        }
+        guard let url = URL(string: normalized), url.scheme?.lowercased() == "nexus",
               let host = url.host else {
             isError = true
             errorMessage = "Not a valid Nexus pairing QR"
             return
         }
-        // url.host excludes the scheme AND the port; url.path keeps the path
         var hostPort = host
         if let port = url.port {
             hostPort += ":\(port)"
         }
         let relay = "wss://\(hostPort)\(url.path)"
-        if let comps = URLComponents(string: payload),
-           let codeValue = comps.queryItems?.first(where: { $0.name == "code" })?.value {
-            let trimmed = codeValue.uppercased()
-            guard trimmed.count >= 8,
-                  trimmed.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
-                isError = true
-                errorMessage = "Pairing code in QR is invalid"
-                return
-            }
-            code = trimmed
-            if let nameValue = comps.queryItems?.first(where: { $0.name == "name" })?.value,
-               !nameValue.isEmpty {
-                serverName = nameValue
-            }
-            relayUrl = relay
-            isError = false
-            errorMessage = ""
-        } else {
+        guard let comps = URLComponents(string: normalized),
+              let codeValue = comps.queryItems?.first(where: { $0.name == "code" })?.value else {
             isError = true
             errorMessage = "Pairing QR is missing the code"
+            return
         }
+        let trimmed = codeValue.uppercased()
+        guard trimmed.count >= 8, trimmed.count <= 12,
+              trimmed.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
+            isError = true
+            errorMessage = "Pairing code in QR is invalid"
+            return
+        }
+        let name = comps.queryItems?.first(where: { $0.name == "name" })?.value ?? ""
+        // Show the confirmation alert before anything is applied.
+        pendingScan = ScannedPairing(relay: relay, code: trimmed, name: name)
+        isShowingConfirmAlert = true
+    }
+
+    /// Scan step 2: user confirmed — fill the form (still editable before
+    /// Add Server is actually tapped).
+    private func fillForm(from scanned: ScannedPairing) {
+        relayUrl = scanned.relay
+        code = scanned.code
+        if !scanned.name.isEmpty {
+            serverName = scanned.name
+        }
+        isError = false
+        errorMessage = ""
     }
 
     private var canAdd: Bool {
@@ -203,16 +239,26 @@ struct PairingView: View {
         let name = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
         // Normalize so the QR is nexus://<host/path> — strip any scheme the
         // relay field already carries (the agent re-adds wss://).
+        // Case-insensitive: 'WSS://host' must strip just like 'wss://host'.
         var relayPart = trimmedRelay
+        let lowered = relayPart.lowercased()
         for scheme in ["wss://", "ws://"] {
-            if relayPart.hasPrefix(scheme) {
+            if lowered.hasPrefix(scheme) {
                 relayPart = String(relayPart.dropFirst(scheme.count))
                 break
             }
         }
-        var payload = "nexus://\(relayPart)?code=\(trimmedCode)"
+        // Reject relays that can't round-trip through a QR cleanly
+        guard !relayPart.contains("?"), !relayPart.contains("#"),
+              !relayPart.contains(where: { $0.isWhitespace }) else { return nil }
+        // Strict encoding: code/name must not smuggle '&' or '=' into the
+        // query string (which would inject extra params on decode).
+        let queryAllowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        let safeCode = trimmedCode.addingPercentEncoding(withAllowedCharacters: queryAllowed) ?? trimmedCode
+        var payload = "nexus://\(relayPart)?code=\(safeCode)"
         if !name.isEmpty {
-            payload += "&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name)"
+            let safeName = name.addingPercentEncoding(withAllowedCharacters: queryAllowed) ?? name
+            payload += "&name=\(safeName)"
         }
         guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
         filter.setValue(Data(payload.utf8), forKey: "inputMessage")
@@ -256,7 +302,8 @@ struct PairingView: View {
             errorMessage = "Relay must use wss:// (TLS)"
             return
         }
-        guard trimmedCode.count >= 8, trimmedCode.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
+        guard trimmedCode.count >= 8, trimmedCode.count <= 12,
+              trimmedCode.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
             isError = true
             errorMessage = "Enter the 8-character pairing code from the agent"
             return
