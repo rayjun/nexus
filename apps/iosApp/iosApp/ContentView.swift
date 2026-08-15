@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var selectedTimeline: SessionTimeline?
     @State private var resumedSessionIds: [String: String] = [:]
     @State private var isLoadingTimeline = false
+    @State private var isInterrupting = false
     @State private var timelineError = ""
     @State private var followUpDraft = ""
     @State private var isAppendingGoal = false
@@ -96,13 +97,17 @@ struct ContentView: View {
                 relay.connect(serverID: serverID)
             }
         }
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase) { phase in  // deprecated form: iOS 16 target
             // Returning to the foreground: refresh home data (sessions,
-            // approvals, cron) — the app cannot receive anything while
-            // backgrounded (URLSession is suspended), so approvals that
-            // arrived while away are only visible after this reload.
+            // approvals, cron). iOS suspends URLSession in background, so
+            // the socket is usually dead here — reconnect first, and the
+            // isConnected onChange below triggers the reload once it's up.
             if phase == .active, !relay.servers.isEmpty {
-                Task { await loadHomeViaWS() }
+                if let serverID = relay.activeServerID, !relay.isConnected {
+                    relay.connect(serverID: serverID)
+                } else {
+                    Task { await loadHomeViaWS() }
+                }
             }
         }
         .onChange(of: relay.isConnected) { connected in
@@ -200,9 +205,9 @@ struct ContentView: View {
                         isShowingEditServer = true
                     }
                     // Pending approvals callout — a tap jumps to the Inbox
-                    // (which hosts the APPROVALS section). Visible
-                    // immediately on return to foreground (scenePhase reload).
-                    if !approvalList.isEmpty {
+                    // (which hosts the APPROVALS section). Hidden while
+                    // loading so a stale count never flashes.
+                    if !approvalList.isEmpty && !isLoadingApprovals {
                         Button {
                             selectedSection = "Inbox"
                         } label: {
@@ -214,7 +219,8 @@ struct ContentView: View {
                             }
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
+                            .frame(minHeight: 44)
+                            .padding(.vertical, 4)
                             .background(Color.orange, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                         .buttonStyle(.plain)
@@ -1489,6 +1495,18 @@ struct ContentView: View {
                     Image(systemName: "chevron.left")
                 }
             }
+            // Stop a running session (README feature: interrupt running
+            // sessions). Only shown when the session is actively running.
+            if session.status == "running" {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        Task { await interruptSession(session) }
+                    } label: {
+                        Image(systemName: isInterrupting ? "hourglass" : "stop.circle")
+                    }
+                    .disabled(isInterrupting)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { await loadTimeline(for: session) }
@@ -2369,6 +2387,25 @@ struct ContentView: View {
             toast = ToastMessage(text: error.localizedDescription, kind: .error)
         }
         isAppendingGoal = false
+    }
+
+    /// Stop a running session (session.interrupt is allowlisted on the agent).
+    private func interruptSession(_ session: SessionSummary) async {
+        isInterrupting = true
+        do {
+            guard relay.isConnected else {
+                throw NSError(domain: "Nexus", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "Not connected"])
+            }
+            let state = try await sessionMessages(for: session.id)
+            _ = try await relay.call("session.interrupt", params: ["session_id": state.activeSessionId])
+            await loadHomeViaWS()
+            await loadTimeline(for: session)
+            toast = ToastMessage(text: "Session stopped", kind: .success)
+        } catch {
+            toast = ToastMessage(text: "Interrupt failed: \(error.localizedDescription)", kind: .error)
+        }
+        isInterrupting = false
     }
 
     private func normalized(_ value: String) -> String {

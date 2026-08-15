@@ -303,7 +303,7 @@ class RelayServer:
                 elif mtype == "data":
                     channel_id = msg.get("channel", "")
                     payload = msg.get("payload", "")
-                    if not channel_id or not payload:
+                    if not channel_id or not payload or not isinstance(payload, str):
                         continue
                     # Cap payload size: a hostile/buggy client must not be
                     # able to push unbounded frames through the relay
@@ -346,7 +346,10 @@ async def main() -> None:
 
     log.info("relay listening on %s:%d", RELAY_HOST, RELAY_PORT)
 
-    async with serve(server.handle, RELAY_HOST, RELAY_PORT):
+    async with serve(server.handle, RELAY_HOST, RELAY_PORT,
+                     # Raw-frame cap above the app-level MAX_PAYLOAD check:
+                     # the JSON envelope + base64 inflate a payload by ~1.4x.
+                     max_size=MAX_PAYLOAD * 2):
         await stop_event.wait()
         cleanup_task.cancel()
         await asyncio.gather(cleanup_task, return_exceptions=True)

@@ -33,10 +33,15 @@ if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)';
     exit 1
 fi
 
-# Validate INSTALL_DIR: no whitespace (breaks the shim shebang)
+# Validate INSTALL_DIR: no whitespace (breaks the shim shebang) and no
+# XML/systemd metacharacters (would corrupt the plist/unit files).
 case "$INSTALL_DIR" in
     *[[:space:]]*)
         echo "ERROR: NEXUS_INSTALL_DIR must not contain whitespace: '$INSTALL_DIR'" >&2
+        exit 1
+        ;;
+    *[\&\<\%]*)
+        echo "ERROR: NEXUS_INSTALL_DIR must not contain '&', '<' or '%': '$INSTALL_DIR'" >&2
         exit 1
         ;;
 esac
@@ -111,7 +116,11 @@ if [ -d "$HOME/Library/LaunchAgents" ] && [ ! -f "$HOME/Library/LaunchAgents/com
 </plist>
 PLIST
     launchctl unload "$HOME/Library/LaunchAgents/com.rayjun.nexus-agent.plist" 2>/dev/null || true
-    launchctl load "$HOME/Library/LaunchAgents/com.rayjun.nexus-agent.plist"
+    if ! launchctl load "$HOME/Library/LaunchAgents/com.rayjun.nexus-agent.plist" 2>/dev/null; then
+        # Headless SSH sessions have no GUI domain — degrade gracefully
+        # instead of aborting the whole install.
+        echo "WARN: launchd load failed (no GUI session?) — crash supervision inactive"
+    fi
 fi
 if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files >/dev/null 2>&1 \
    && [ ! -f "$HOME/.config/systemd/user/nexus-agent.service" ]; then
@@ -120,7 +129,6 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files >/de
     cat > "$HOME/.config/systemd/user/nexus-agent.service" <<UNIT
 [Unit]
 Description=Nexus mobile agent (E2E relay bridge)
-After=network-online.target
 
 [Service]
 ExecStart=$INSTALL_DIR/venv/bin/nexus-agent run-supervised
@@ -132,6 +140,11 @@ WantedBy=default.target
 UNIT
     systemctl --user daemon-reload
     systemctl --user enable nexus-agent.service
+    # Linger keeps the user manager alive after logout/reboot on servers.
+    if command -v loginctl >/dev/null 2>&1; then
+        loginctl enable-linger "$USER" 2>/dev/null \
+            || echo "WARN: could not enable linger — run 'loginctl enable-linger $USER' on headless servers"
+    fi
 fi
 
 echo ""

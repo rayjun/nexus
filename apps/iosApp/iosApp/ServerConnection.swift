@@ -204,9 +204,21 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
             log("reconnected, communication mode")
             onStatusChange?()
             NotificationCenter.default.post(name: NSNotification.Name("RelayPaired"), object: profile.id)
-        } else {
-            // First pairing — wait for agent public key
+        } else if pairingPSK != nil {
+            // First pairing in progress — wait for agent public key
             isPairingInProgress = true
+        } else {
+            // CRITICAL: no keys AND no pairing in progress — a server that
+            // was persisted before pairing completed (app killed mid-pair)
+            // or lost its keys. Entering pairing mode here would compute
+            // the shared secret with psk=nil = RAW unblinded ECDH (bypasses
+            // the PSK MITM defense). Fail loudly instead.
+            log("server has no E2E keys and no pairing in progress — requires re-pair")
+            isPairingInProgress = false
+            cancelPairingTimer()
+            DispatchQueue.main.async {
+                self.onPairingFailure?("Server lost its pairing keys — remove and re-add")
+            }
         }
     }
 

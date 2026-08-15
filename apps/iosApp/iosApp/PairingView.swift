@@ -9,7 +9,8 @@ struct PairingView: View {
     @State private var isAdding = false
     @State private var isShowingScanner = false
     @ObservedObject private var relay = RelayClient.shared
-    @State private var pairingObserver: NSObjectProtocol?
+    @State private var pairedObserver: NSObjectProtocol?
+    @State private var failureObserver: NSObjectProtocol?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -139,6 +140,11 @@ struct PairingView: View {
                     ?? "wss://relay.example.com/relay"
             }
         }
+        .onDisappear {
+            // The view can be torn down mid-pairing (root swap) — never
+            // leak observers that capture self.
+            removeObservers()
+        }
         .sheet(isPresented: $isShowingScanner) {
             QRScannerView(
                 onScan: { payload in
@@ -227,7 +233,9 @@ struct PairingView: View {
 
     private var canAdd: Bool {
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !relayUrl.isEmpty && trimmedCode.count >= 8
+        // Align with startPairing's real rule: 8-12 alphanumeric.
+        return !relayUrl.isEmpty && trimmedCode.count >= 8 && trimmedCode.count <= 12
+            && trimmedCode.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil
     }
 
     /// QR payload: nexus://<relay>?code=<CODE>&name=<name>
@@ -286,6 +294,10 @@ struct PairingView: View {
     }
 
     private func startPairing() {
+        // Re-entry guard: a fast double-tap can run this twice before the
+        // button's disabled state applies — that would add two servers for
+        // the same channel.
+        guard !isAdding else { return }
         isError = false
         let trimmedRelay = relayUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -313,14 +325,19 @@ struct PairingView: View {
         let displayName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
         relay.addServer(relayURL: trimmedRelay, name: displayName.isEmpty ? nil : displayName, code: trimmedCode)
         // Listen for pairing completion or failure; stop the spinner either way.
-        pairingObserver = NotificationCenter.default.addObserver(
+        // TWO separate tokens: one slot would overwrite the first observer,
+        // leaking it (and its self-capturing closure) forever.
+        pairedObserver = NotificationCenter.default.addObserver(
             forName: NSNotification.Name("RelayPaired"),
             object: nil, queue: .main
         ) { _ in
+            // self is a struct — value capture, no retain cycle. The
+            // previously-leaked observers were a token-overwrite bug, not
+            // a capture-cycle bug.
             self.isAdding = false
-            self.removeObserver()
+            self.removeObservers()
         }
-        pairingObserver = NotificationCenter.default.addObserver(
+        failureObserver = NotificationCenter.default.addObserver(
             forName: NSNotification.Name("RelayPairingFailed"),
             object: nil, queue: .main
         ) { note in
@@ -328,14 +345,23 @@ struct PairingView: View {
             let msg = (note.userInfo?["message"] as? String) ?? "Pairing failed"
             self.isError = true
             self.errorMessage = msg
-            self.removeObserver()
+            self.removeObservers()
         }
     }
 
-    private func removeObserver() {
-        if let pairingObserver {
-            NotificationCenter.default.removeObserver(pairingObserver)
+    private func removeObservers() {
+        if let pairedObserver {
+            NotificationCenter.default.removeObserver(pairedObserver)
         }
-        pairingObserver = nil
+        if let failureObserver {
+            NotificationCenter.default.removeObserver(failureObserver)
+        }
+        pairedObserver = nil
+        failureObserver = nil
+    }
+
+    private func removeObserver() {
+        // Legacy alias — kept for call-site compatibility.
+        removeObservers()
     }
 }

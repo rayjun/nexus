@@ -74,7 +74,7 @@ def read_pid() -> int | None:
 
 
 def _pid_is_agent(pid: int) -> bool:
-    """Verify the pid actually runs relay_agent.py --daemon (identity check).
+    """Verify the pid actually runs the nexus agent (identity check).
 
     Guards against a stale pidfile whose pid was reused by an unrelated
     process — stop() must never SIGKILL a stranger.
@@ -85,7 +85,11 @@ def _pid_is_agent(pid: int) -> bool:
             capture_output=True, text=True, timeout=3,
         ).stdout
         cmd = out.strip()
-        return "relay_agent.py" in cmd and "--daemon" in cmd
+        # Two legitimate shapes: built-in daemon (relay_agent.py --daemon)
+        # and the supervised foreground entry (nexus-agent run-supervised).
+        return ("relay_agent.py" in cmd and "--daemon" in cmd) or (
+            "nexus-agent" in cmd and "run-supervised" in cmd
+        )
     except Exception:
         return False
 
@@ -222,10 +226,26 @@ def cmd_start(args) -> int:
     # agent on crash; the built-in daemon is the fallback.
     sup = _supervisor()
     if sup is not None:
+        # Pre-flight: an unpaired install must not be handed to the
+        # supervisor — it would exit(1) instantly and the supervisor
+        # would respawn it forever.
+        import relay_agent
+        if not relay_agent.MobileRelayClient(relay, dash).is_paired:
+            log("ERROR: not paired yet — run 'nexus-agent pair' first")
+            return 1
         log(f"starting via supervisor ({sup})…")
         rc = _supervisor_control(sup, "start")
         if rc == 0:
-            return 0
+            # kickstart/systemctl return 0 on spawn, not on ready — poll
+            # for the pidfile + liveness, mirroring the daemon path.
+            for _ in range(50):
+                time.sleep(0.1)
+                if is_running():
+                    log(f"started (pid {read_pid()}) via {sup}")
+                    return 0
+            log("ERROR: supervisor reported success but the agent did not come up")
+            _tail_log()
+            return 1
         log("supervisor start failed — falling back to built-in daemon")
     # Start the agent in the background via the venv's python
     python = _python_bin()
@@ -367,15 +387,23 @@ def _supervisor() -> str | None:
 def _supervisor_control(kind: str, action: str) -> int:
     """start/stop the agent through launchd or systemd (returns exit code)."""
     if kind == "launchd":
+        domain = f"gui/{os.getuid()}"
         label = "com.rayjun.nexus-agent"
         if action == "start":
-            r = subprocess.run(["launchctl", "kickstart", f"gui/{os.getuid()}/{label}"],
+            # enable (undo a previous stop) + kickstart — KeepAlive then
+            # keeps it alive across crashes.
+            subprocess.run(["launchctl", "enable", f"{domain}/{label}"], capture_output=True)
+            r = subprocess.run(["launchctl", "kickstart", f"{domain}/{label}"],
                                capture_output=True)
             return r.returncode
         if action == "stop":
-            r = subprocess.run(["launchctl", "kill", "TERM", f"gui/{os.getuid()}/{label}"],
-                               capture_output=True)
-            return r.returncode
+            # 'kill TERM' is NOT a stop — KeepAlive would immediately
+            # restart the agent. Disable the job, then kill the running
+            # instance.
+            subprocess.run(["launchctl", "disable", f"{domain}/{label}"], capture_output=True)
+            subprocess.run(["launchctl", "kill", "TERM", f"{domain}/{label}"],
+                           capture_output=True)
+            return 0
     if kind == "systemd":
         r = subprocess.run(["systemctl", "--user", action, "nexus-agent"], capture_output=True)
         return r.returncode
@@ -395,11 +423,17 @@ def cmd_run_supervised(args) -> int:
     import asyncio
     import relay_agent  # same directory (RELAY_DIR is already on sys.path)
     client = relay_agent.MobileRelayClient(relay, dash)
-    if client.is_paired:
-        asyncio.run(client.run())
-    else:
+    if not client.is_paired:
         log("not paired yet — run 'nexus-agent pair' first")
         return 1
+    # Write our pidfile so status/stop/update can see the supervised
+    # process (the supervisor itself is the only thing that restarts us).
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    PID_PATH.write_text(str(os.getpid()))
+    try:
+        asyncio.run(client.run())
+    finally:
+        PID_PATH.unlink(missing_ok=True)
     return 0
 
 
