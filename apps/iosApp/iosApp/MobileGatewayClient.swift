@@ -27,7 +27,7 @@ struct SessionTimeline: Decodable {
     let items: [TimelineItem]
 }
 
-struct TimelineItem: Decodable, Identifiable, Hashable {
+struct TimelineItem: Codable, Identifiable, Hashable {
     let id: String
     let type: String
     let text: String?
