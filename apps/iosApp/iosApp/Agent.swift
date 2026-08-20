@@ -7,7 +7,7 @@ enum AgentStatus: String, Codable {
     case unpaired
 }
 
-struct Agent: Identifiable, Codable, Equatable, Hashable {
+struct NexusAgent: Identifiable, Codable, Equatable, Hashable {
     var id: String
     var serverID: String
     // nil => no server thread yet (local-only agent until first prompt)

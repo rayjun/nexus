@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AgentChatView: View {
-    var agent: Agent
+    var agent: NexusAgent
     @ObservedObject var registry: AgentRegistry
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var relay: RelayClient
@@ -11,7 +11,7 @@ struct AgentChatView: View {
     @State private var errorText = ""
     @FocusState private var inputFocused: Bool
 
-    private var resolvedAgent: Agent {
+    private var resolvedAgent: NexusAgent {
         registry.agents.first(where: { $0.id == agent.id }) ?? agent
     }
 
@@ -164,7 +164,7 @@ struct AgentChatView: View {
             var sid = boundID
             if sid == nil || sid!.isEmpty {
                 let createRes = try await relay.call("session.create", params: ["title": agent.displayName])
-                let created = extractSessionID(from: createRes)
+                let created = SessionIDExtractor.extract(from: createRes)
                 guard let created, !created.isEmpty else {
                     errorText = "Failed to create session"
                     isSending = false
@@ -178,7 +178,7 @@ struct AgentChatView: View {
                 return
             }
             let res = try await relay.call("prompt.submit", params: ["session_id": sid, "text": text])
-            if boundID == nil, let nid = extractSessionID(from: res), !nid.isEmpty {
+            if boundID == nil, let nid = SessionIDExtractor.extract(from: res), !nid.isEmpty {
                 await MainActor.run { registry.bindSession(agentID: resolvedAgent.id, sessionID: nid) }
             }
             // Update the card preview immediately (fast feedback without waiting on history).
@@ -194,19 +194,6 @@ struct AgentChatView: View {
         await loadHistory()
     }
 
-    private func extractSessionID(from value: Any) -> String? {
-        if let s = value as? String, !s.isEmpty { return s }
-        if let d = value as? [String: Any] {
-            for k in ["session_id", "id", "sessionId"] {
-                if let v = d[k] as? String, !v.isEmpty { return v }
-                if let nested = d[k] as? [String: Any], let v = nested["id"] as? String, !v.isEmpty { return v }
-            }
-            if let data = d["data"] as? [String: Any] {
-                for k in ["session_id", "id"] { if let v = data[k] as? String, !v.isEmpty { return v } }
-            }
-        }
-        return nil
-    }
 
     private func decodeTimeline(_ items: [[String: Any]]) -> [TimelineItem] {
         items.compactMap { d in

@@ -4,7 +4,7 @@ struct AgentComposeView: View {
     @ObservedObject var registry: AgentRegistry
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var relay: RelayClient
-    var onCreated: ((Agent) -> Void)? = nil
+    var onCreated: ((NexusAgent) -> Void)? = nil
 
     @State private var name = ""
     @State private var icon = "sparkles"
@@ -132,7 +132,7 @@ struct AgentComposeView: View {
         if mode == .importSession {
             guard !selectedSessionID.isEmpty else { errorText = "Pick a session or switch to New chat"; return }
             if let resumeRes = try? await relay.call("session.resume", params: ["session_id": selectedSessionID]) {
-                let live = extractSessionID(from: resumeRes)
+                let live = SessionIDExtractor.extract(from: resumeRes)
                 if let live, !live.isEmpty {
                     bound = live
                 }
@@ -142,8 +142,8 @@ struct AgentComposeView: View {
                 return
             }
         }
-        let agent = Agent(
-            id: Agent.localID(),
+        let agent = NexusAgent(
+            id: NexusAgent.localID(),
             serverID: selectedServerID,
             boundSessionID: bound,
             name: trimmedName,
@@ -157,29 +157,10 @@ struct AgentComposeView: View {
             onCreated?(agent)
         }
     }
-
-    /// Extract a usable session id from a gateway result dict (mirrors
-    /// AgentChatView.extractSessionID). Prefers the live sid.
-    private func extractSessionID(from value: Any) -> String? {
-        if let s = value as? String, !s.isEmpty { return s }
-        if let d = value as? [String: Any] {
-            for k in ["session_id", "id", "sessionId"] {
-                if let v = d[k] as? String, !v.isEmpty { return v }
-                if let nested = d[k] as? [String: Any], let v = nested["id"] as? String, !v.isEmpty { return v }
-            }
-            if let info = d["info"] as? [String: Any] {
-                for k in ["session_id", "sid"] { if let v = info[k] as? String, !v.isEmpty { return v } }
-            }
-            if let data = d["data"] as? [String: Any] {
-                for k in ["session_id", "id"] { if let v = data[k] as? String, !v.isEmpty { return v } }
-            }
-        }
-        return nil
-    }
 }
 
 struct AgentDetailView: View {
-    var agent: Agent
+    var agent: NexusAgent
     @ObservedObject var registry: AgentRegistry
     @Environment(\.dismiss) private var dismiss
     @State private var name: String = ""

@@ -4,14 +4,14 @@ enum AgentStore {
     private static let agentsKey = "nexus_agents_v1"
     private static let chatsKey = "nexus_agent_chats_v1"
 
-    static func loadAgents() -> [Agent] {
+    static func loadAgents() -> [NexusAgent] {
         guard let data = UserDefaults.standard.data(forKey: agentsKey),
-              let agents = try? JSONDecoder().decode([Agent].self, from: data)
+              let agents = try? JSONDecoder().decode([NexusAgent].self, from: data)
         else { return [] }
         return agents
     }
 
-    static func saveAgents(_ agents: [Agent]) {
+    static func saveAgents(_ agents: [NexusAgent]) {
         if let data = try? JSONEncoder().encode(agents) {
             UserDefaults.standard.set(data, forKey: agentsKey)
         }
@@ -31,10 +31,10 @@ enum AgentStore {
         }
     }
 
-    static func seedCandidates(from sessions: [SessionSummary]) -> [Agent] {
+    static func seedCandidates(from sessions: [SessionSummary]) -> [NexusAgent] {
         sessions.map { s in
-            Agent(
-                id: Agent.localID(),
+            NexusAgent(
+                id: NexusAgent.localID(),
                 serverID: "",
                 boundSessionID: s.id,
                 name: s.title.isEmpty ? "Agent" : s.title,
@@ -51,7 +51,7 @@ enum AgentStore {
 
 @MainActor
 final class AgentRegistry: ObservableObject {
-    @Published var agents: [Agent] {
+    @Published var agents: [NexusAgent] {
         didSet { AgentStore.saveAgents(agents) }
     }
     @Published var chats: [String: [TimelineItem]] {
@@ -63,7 +63,7 @@ final class AgentRegistry: ObservableObject {
         chats = AgentStore.loadChats()
     }
 
-    func upsert(_ agent: Agent) {
+    func upsert(_ agent: NexusAgent) {
         var a = agent
         a.updatedAt = Date()
         if let idx = agents.firstIndex(where: { $0.id == a.id }) {

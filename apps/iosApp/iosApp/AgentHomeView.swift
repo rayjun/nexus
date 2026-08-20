@@ -6,16 +6,16 @@ struct AgentHomeView: View {
     @State private var isShowingCompose = false
     @State private var isShowingSettings = false
     @State private var relayUrlDraft = ""
-    @State private var selectedAgent: Agent?
+    @State private var selectedNexusAgent: NexusAgent?
     @State private var isShowingDetail = false
-    @State private var detailAgent: Agent?
+    @State private var detailNexusAgent: NexusAgent?
     @State private var toast: ToastMessage?
     @State private var approvalCount = 0
     @State private var isLoadingApprovals = false
     @Environment(\.scenePhase) private var scenePhase
 
-    private var groupedAgents: [(ServerProfile?, [Agent])] {
-        var result: [(ServerProfile?, [Agent])] = []
+    private var groupedAgents: [(ServerProfile?, [NexusAgent])] {
+        var result: [(ServerProfile?, [NexusAgent])] = []
         let grouped = Dictionary(grouping: registry.agents, by: { $0.serverID })
         for server in relay.servers {
             if let list = grouped[server.id] { result.append((server, list)) }
@@ -77,14 +77,14 @@ struct AgentHomeView: View {
         }
         .sheet(isPresented: $isShowingCompose) {
             AgentComposeView(registry: registry) { agent in
-                selectedAgent = agent
+                selectedNexusAgent = agent
             }
         }
         .sheet(isPresented: $isShowingSettings) { settingsSheet }
         .sheet(isPresented: $isShowingDetail) {
-            if let a = detailAgent { AgentDetailView(agent: a, registry: registry) }
+            if let a = detailNexusAgent { AgentDetailView(agent: a, registry: registry) }
         }
-        .fullScreenCover(item: $selectedAgent) { agent in
+        .fullScreenCover(item: $selectedNexusAgent) { agent in
             AgentChatView(agent: agent, registry: registry)
         }
     }
@@ -196,9 +196,9 @@ struct AgentHomeView: View {
         }
     }
 
-    private func agentCard(_ agent: Agent) -> some View {
+    private func agentCard(_ agent: NexusAgent) -> some View {
         let isOffline = agent.status == .offline || agent.status == .lostKeys
-        return Button { selectedAgent = agent } label: {
+        return Button { selectedNexusAgent = agent } label: {
             HStack(spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous).fill(isOffline ? NexusStyle.line.opacity(0.5) : NexusStyle.blue.opacity(0.12)).frame(width: 40, height: 40)
@@ -231,7 +231,7 @@ struct AgentHomeView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button { detailAgent = agent; isShowingDetail = true } label: { Label("Edit / Info", systemImage: "slider.horizontal.3") }
+            Button { detailNexusAgent = agent; isShowingDetail = true } label: { Label("Edit / Info", systemImage: "slider.horizontal.3") }
             if agent.status == .offline || agent.status == .lostKeys {
                 Button { rePairById(agent.serverID) } label: { Label("Re-pair server", systemImage: "arrow.triangle.2.circlepath") }
             }

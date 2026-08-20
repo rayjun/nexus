@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* NexusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* NexusApp.swift */; };
-		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* ContentView.swift */; };
 		A10000000000000000000003 /* MobileGatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* MobileGatewayClient.swift */; };
 		A10000000000000000000004 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* KeychainHelper.swift */; };
 		A10000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* Assets.xcassets */; };
@@ -24,12 +23,12 @@ A20000000000000000000006 /* PairingView.swift in Sources */ = {isa = PBXBuildFil
 		B00000000000000000000004 /* AgentChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000004 /* AgentChatView.swift */; };
 		B00000000000000000000005 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000005 /* AgentViews.swift */; };
 		B00000000000000000000006 /* NexusStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000006 /* NexusStyle.swift */; };
+		C00000000000000000000001 /* SessionIDExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000110000001 /* SessionIDExtractor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000010 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000011 /* NexusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexusApp.swift; sourceTree = "<group>"; };
-		A10000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A10000000000000000000013 /* MobileGatewayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileGatewayClient.swift; sourceTree = "<group>"; };
 		A10000000000000000000015 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		A10000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -46,6 +45,7 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 		B00000000000000110000004 /* AgentChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatView.swift; sourceTree = "<group>"; };
 		B00000000000000110000005 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		B00000000000000110000006 /* NexusStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexusStyle.swift; sourceTree = "<group>"; };
+		C00000000000000110000001 /* SessionIDExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionIDExtractor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -71,7 +71,6 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000011 /* NexusApp.swift */,
-				A10000000000000000000012 /* ContentView.swift */,
 				A10000000000000000000013 /* MobileGatewayClient.swift */,
 				A20000000000000000000001 /* E2ECrypto.swift */,
 				A20000000000000000000009 /* ServerProfile.swift */,
@@ -86,6 +85,7 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 				B00000000000000110000004 /* AgentChatView.swift */,
 				B00000000000000110000005 /* AgentViews.swift */,
 				B00000000000000110000006 /* NexusStyle.swift */,
+				C00000000000000110000001 /* SessionIDExtractor.swift */,
 				A10000000000000000000014 /* Info.plist */,
 				A10000000000000000000016 /* Assets.xcassets */,
 			);
@@ -170,13 +170,13 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 			buildActionMask = 2147483647;
 			files = (
 				B00000000000000000000006 /* NexusStyle.swift in Sources */,
+				C00000000000000000000001 /* SessionIDExtractor.swift in Sources */,
 				B00000000000000000000001 /* Agent.swift in Sources */,
 				B00000000000000000000002 /* AgentStore.swift in Sources */,
 				B00000000000000000000003 /* AgentHomeView.swift in Sources */,
 				B00000000000000000000004 /* AgentChatView.swift in Sources */,
 				B00000000000000000000005 /* AgentViews.swift in Sources */,
 				A10000000000000000000001 /* NexusApp.swift in Sources */,
-				A10000000000000000000002 /* ContentView.swift in Sources */,
 				A10000000000000000000003 /* MobileGatewayClient.swift in Sources */,
 				A20000000000000000000002 /* E2ECrypto.swift in Sources */,
 				A2000000000000000000000A /* ServerProfile.swift in Sources */,
