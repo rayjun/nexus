@@ -2,15 +2,23 @@ import SwiftUI
 
 @main
 struct NexusApp: App {
-    @StateObject private var relay = RelayClient.shared
-    @StateObject private var agentRegistry = AgentRegistry()
+    @StateObject private var relay: RelayClient
+    @StateObject private var chatStore: ChatStore
     @State private var isShowingPairing = false
+    @AppStorage("nexus_theme_light") private var lightTheme = true
+
+    init() {
+        let relay = RelayClient.shared
+        _relay = StateObject(wrappedValue: relay)
+        _chatStore = StateObject(wrappedValue: ChatStore(relay: relay))
+    }
 
     var body: some Scene {
         WindowGroup {
             root
                 .environmentObject(relay)
-                .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowPairingView"))) { note in
+                .preferredColorScheme(lightTheme ? .light : .dark)
+                .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowPairingView"))) { _ in
                     isShowingPairing = true
                 }
                 .sheet(isPresented: $isShowingPairing) {
@@ -25,7 +33,7 @@ struct NexusApp: App {
         if relay.servers.isEmpty {
             PairingView()
         } else {
-            AgentHomeView(registry: agentRegistry)
+            ChatListView(store: chatStore)
         }
     }
 }
