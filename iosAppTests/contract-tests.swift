@@ -58,5 +58,38 @@ expect(extract(from: resumeInfo) == "deadbeef", "session.resume -> live sid via 
 // 6) bare string passthrough.
 expect(extract(from: "abc123") == "abc123", "bare string passthrough")
 
-print(failures == 0 ? "\nALL OK (6/6)" : "\n\(failures) FAILURES")
+// ── v2: profiles contract (bot = Hermes profile) ──
+// 7) profiles.list row shape → Bot mapping fields (name/display_name/model/
+//    provider/description/last_session).
+func botFields(from row: [String: Any]) -> (name: String?, display: String?, model: String?) {
+    let name = row["name"] as? String
+    let display = row["display_name"] as? String
+    let model = row["model"] as? String
+    return (name, display, model)
+}
+let prow: [String: Any] = [
+    "name": "writer", "display_name": "Writer Bot", "model": "glm-5.2",
+    "provider": "ollama-cloud", "description": "writes docs",
+    "last_session": ["id": "a1b2c3d4", "preview": "draft done", "last_active": 1_723_000_000.0],
+]
+let pf = botFields(from: prow)
+expect(pf.name == "writer", "profiles.list row → name (bot slug)")
+expect(pf.display == "Writer Bot", "profiles.list row → display_name")
+expect(pf.model == "glm-5.2", "profiles.list row → model")
+expect((prow["last_session"] as? [String: Any])?["id"] as? String == "a1b2c3d4",
+       "profiles.list last_session carries resume target id")
+
+// 8) profile name slug — Hermes web UI regex ^[a-z0-9][a-z0-9_-]{0,63}$.
+func validSlug(_ s: String) -> Bool {
+    guard !s.isEmpty, s.count <= 64 else { return false }
+    return s.range(of: "^[a-z0-9][a-z0-9_-]{0,63}$", options: .regularExpression) != nil
+}
+expect(validSlug("writer"), "slug: lowercase ok")
+expect(validSlug("code-reviewer2"), "slug: hyphen+digit ok")
+expect(!validSlug("Writer"), "slug: uppercase rejected")
+expect(!validSlug(""), "slug: empty rejected")
+expect(!validSlug("a b c"), "slug: space rejected")
+expect(!validSlug(String(repeating: "a", count: 65)), "slug: 65 chars rejected")
+
+print(failures == 0 ? "\nALL OK (14 tests)" : "\n\(failures) FAILURES")
 exit(failures == 0 ? 0 : 1)

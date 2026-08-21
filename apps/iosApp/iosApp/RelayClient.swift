@@ -158,6 +158,17 @@ final class RelayClient: NSObject, ObservableObject {
         return try await conn.call(method, params: params)
     }
 
+    /// Per-server RPC routing — used by ChatStore roster refresh and chat
+    /// targeting so one server's fetch never flips the UI's active server
+    /// (v1 setActive-flip race). No connection state is mutated here.
+    func call(serverID: String, method: String, params: [String: Any] = [:]) async throws -> Any {
+        guard let conn = connections[serverID] else {
+            throw NSError(domain: "Nexus", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "No connection for server"])
+        }
+        return try await conn.call(method, params: params)
+    }
+
     func disconnect() {
         if let id = activeServerID {
             connections[id]?.disconnect()

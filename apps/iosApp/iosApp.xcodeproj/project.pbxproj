@@ -24,6 +24,9 @@ A20000000000000000000006 /* PairingView.swift in Sources */ = {isa = PBXBuildFil
 		B00000000000000000000005 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000005 /* AgentViews.swift */; };
 		B00000000000000000000006 /* NexusStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000006 /* NexusStyle.swift */; };
 		C00000000000000000000001 /* SessionIDExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000110000001 /* SessionIDExtractor.swift */; };
+		D00000000000000000000001 /* Bot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000110000001 /* Bot.swift */; };
+		D00000000000000000000002 /* BotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000110000002 /* BotStore.swift */; };
+		D00000000000000000000003 /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000110000003 /* ChatStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +49,9 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 		B00000000000000110000005 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		B00000000000000110000006 /* NexusStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexusStyle.swift; sourceTree = "<group>"; };
 		C00000000000000110000001 /* SessionIDExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionIDExtractor.swift; sourceTree = "<group>"; };
+		D00000000000000110000001 /* Bot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bot.swift; sourceTree = "<group>"; };
+		D00000000000000110000002 /* BotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotStore.swift; sourceTree = "<group>"; };
+		D00000000000000110000003 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,6 +92,9 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 				B00000000000000110000005 /* AgentViews.swift */,
 				B00000000000000110000006 /* NexusStyle.swift */,
 				C00000000000000110000001 /* SessionIDExtractor.swift */,
+				D00000000000000110000003 /* ChatStore.swift */,
+				D00000000000000110000002 /* BotStore.swift */,
+				D00000000000000110000001 /* Bot.swift */,
 				A10000000000000000000014 /* Info.plist */,
 				A10000000000000000000016 /* Assets.xcassets */,
 			);
@@ -171,6 +180,9 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 			files = (
 				B00000000000000000000006 /* NexusStyle.swift in Sources */,
 				C00000000000000000000001 /* SessionIDExtractor.swift in Sources */,
+				D00000000000000000000003 /* ChatStore.swift in Sources */,
+				D00000000000000000000002 /* BotStore.swift in Sources */,
+				D00000000000000000000001 /* Bot.swift in Sources */,
 				B00000000000000000000001 /* Agent.swift in Sources */,
 				B00000000000000000000002 /* AgentStore.swift in Sources */,
 				B00000000000000000000003 /* AgentHomeView.swift in Sources */,

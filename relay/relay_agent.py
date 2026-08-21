@@ -386,11 +386,17 @@ class MobileRelayClient:
 
         # H3: method allowlist — a phone is a low-trust device. Block methods
         # that expose secrets or grant control beyond chat/approvals.
+        # profiles.list/create/configure: v2 bot roster is server truth — the
+        # phone may spawn/rename bot profiles, mirroring the desktop web UI's
+        # profiles page. profiles.describe/set_asset/get_asset deliberately
+        # omitted (no UI consumer / avatar upload deferred). Delete has no RPC
+        # (REST/CLI only) — app uses a local tombstone.
         allowed = {
             "session.list", "session.resume", "session.history", "session.status",
             "session.create", "session.interrupt", "prompt.submit", "approval.respond",
             "approval.list", "cron.manage", "agents.list", "model.options",
             "tools.list", "toolsets.list",
+            "profiles.list", "profiles.create", "profiles.configure",
         }
         if method not in allowed:
             log.warning("blocked method: %s", method)
