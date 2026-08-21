@@ -1,0 +1,25 @@
+{
+  "name": "@nexus/relay-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the Nexus E2E relay protocol — zero dependencies (Node built-ins only).",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types \"test/**/*.test.mts\"",
+    "check": "node --test --experimental-strip-types \"test/**/*.test.mts\""
+  },
+  "keywords": ["nexus", "e2e", "relay", "chacha20-poly1305", "x25519"],
+  "license": "MIT"
+}
