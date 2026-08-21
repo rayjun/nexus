@@ -17,11 +17,6 @@ A20000000000000000000002 /* E2ECrypto.swift in Sources */ = {isa = PBXBuildFile;
 A20000000000000000000004 /* RelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* RelayClient.swift */; };
 A20000000000000000000006 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* PairingView.swift */; };
 		A2000000000000000000000C /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* QRScannerView.swift */; };
-		B00000000000000000000001 /* Agent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000001 /* Agent.swift */; };
-		B00000000000000000000002 /* AgentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000002 /* AgentStore.swift */; };
-		B00000000000000000000003 /* AgentHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000003 /* AgentHomeView.swift */; };
-		B00000000000000000000004 /* AgentChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000004 /* AgentChatView.swift */; };
-		B00000000000000000000005 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000005 /* AgentViews.swift */; };
 		B00000000000000000000006 /* NexusStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000110000006 /* NexusStyle.swift */; };
 		C00000000000000000000001 /* SessionIDExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000110000001 /* SessionIDExtractor.swift */; };
 		D00000000000000000000001 /* Bot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000110000001 /* Bot.swift */; };
@@ -48,11 +43,6 @@ A20000000000000000000001 /* E2ECrypto.swift */ = {isa = PBXFileReference; lastKn
 A20000000000000000000003 /* RelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayClient.swift; sourceTree = "<group>"; };
 A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000B /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
-		B00000000000000110000001 /* Agent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Agent.swift; sourceTree = "<group>"; };
-		B00000000000000110000002 /* AgentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStore.swift; sourceTree = "<group>"; };
-		B00000000000000110000003 /* AgentHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHomeView.swift; sourceTree = "<group>"; };
-		B00000000000000110000004 /* AgentChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatView.swift; sourceTree = "<group>"; };
-		B00000000000000110000005 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		B00000000000000110000006 /* NexusStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexusStyle.swift; sourceTree = "<group>"; };
 		C00000000000000110000001 /* SessionIDExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionIDExtractor.swift; sourceTree = "<group>"; };
 		D00000000000000110000001 /* Bot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bot.swift; sourceTree = "<group>"; };
@@ -97,11 +87,6 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 				A20000000000000000000005 /* PairingView.swift */,
 				A2000000000000000000000B /* QRScannerView.swift */,
 				A10000000000000000000015 /* KeychainHelper.swift */,
-				B00000000000000110000001 /* Agent.swift */,
-				B00000000000000110000002 /* AgentStore.swift */,
-				B00000000000000110000003 /* AgentHomeView.swift */,
-				B00000000000000110000004 /* AgentChatView.swift */,
-				B00000000000000110000005 /* AgentViews.swift */,
 				B00000000000000110000006 /* NexusStyle.swift */,
 				C00000000000000110000001 /* SessionIDExtractor.swift */,
 				D00000000000000110000003 /* ChatStore.swift */,
@@ -207,11 +192,6 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 				D00000000000000000000005 /* ChatView.swift in Sources */,
 				D00000000000000000000002 /* BotStore.swift in Sources */,
 				D00000000000000000000001 /* Bot.swift in Sources */,
-				B00000000000000000000001 /* Agent.swift in Sources */,
-				B00000000000000000000002 /* AgentStore.swift in Sources */,
-				B00000000000000000000003 /* AgentHomeView.swift in Sources */,
-				B00000000000000000000004 /* AgentChatView.swift in Sources */,
-				B00000000000000000000005 /* AgentViews.swift in Sources */,
 				A10000000000000000000001 /* NexusApp.swift in Sources */,
 				A10000000000000000000003 /* MobileGatewayClient.swift in Sources */,
 				A20000000000000000000002 /* E2ECrypto.swift in Sources */,
