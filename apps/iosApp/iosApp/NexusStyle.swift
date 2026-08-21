@@ -1,6 +1,16 @@
 import SwiftUI
 
 enum NexusStyle {
+    static let background2 = Color(UIColor { tc in
+        tc.userInterfaceStyle == .dark ?
+            UIColor(red: 0.10, green: 0.11, blue: 0.13, alpha: 1) :
+            UIColor(red: 0.98, green: 0.985, blue: 0.995, alpha: 1)
+    })
+    static let surface = Color(UIColor { tc in
+        tc.userInterfaceStyle == .dark ?
+            UIColor(red: 0.13, green: 0.14, blue: 0.16, alpha: 1) :
+            UIColor.white
+    })
     static let background = Color(UIColor { tc in
         tc.userInterfaceStyle == .dark ?
             UIColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1) :

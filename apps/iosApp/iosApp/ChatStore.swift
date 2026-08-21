@@ -162,4 +162,15 @@ final class ChatStore: ObservableObject {
     func setMessages(_ items: [TimelineItem], for botID: String) {
         chats[botID] = Array(items.suffix(200))
     }
+
+    /// Update the roster card's last-preview immediately after a send.
+    func setPreview(for botID: String, preview: String) {
+        guard let idx = bots.firstIndex(where: { $0.id == botID }) else { return }
+        var updated = bots[idx]
+        updated.lastPreview = preview
+        updated.lastActiveAt = Date()
+        updated.updatedAt = Date()
+        bots[idx] = updated
+        bots = bots  // re-publish
+    }
 }
