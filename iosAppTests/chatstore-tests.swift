@@ -110,13 +110,14 @@ final class ChatStore {
                     b.preferredSessionID = old.preferredSessionID
                     b.isTombstoned = old.isTombstoned
                     if old.isTombstoned { b.status = "tombstoned" }
+                    b.updatedAt = old.updatedAt
                 }
                 if let pref = preferredSessions[b.id] { b.preferredSessionID = pref }
-                b.updatedAt = Date()
                 return b
             }
             let others = bots.filter { $0.serverID != server.id }
-            bots = others + merged
+            let next = others + merged
+            if next != bots { bots = next }
         }
     }
 

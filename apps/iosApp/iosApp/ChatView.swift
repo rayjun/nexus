@@ -64,10 +64,41 @@ struct ChatView: View {
         }
         .background(NexusStyle.background)
         .navigationBarHidden(true)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RelayEvent"))) { note in
+            guard let event = note.userInfo?["event"] as? String,
+                  let data = note.userInfo?["data"] as? [String: Any] else { return }
+            handleLiveEvent(event, data)
+        }
         .task {
             await ensureActiveServer()
             await loadOrCreateSession()
             await loadHistory()
+        }
+    }
+
+    // MARK: - Live event handling (streaming)
+
+    /// Consume message.start/delta/interim/complete forwarded by the relay
+    /// agent for THIS bot's profile/session.
+    private func handleLiveEvent(_ event: String, _ data: [String: Any]) {
+        let sessionID = activeSessionID
+        switch event {
+        case "message.start":
+            store.appendStream(botID: resolvedBot.id, sessionID: sessionID, text: "")
+        case "message.delta", "message.interim":
+            if let text = data["text"] as? String, !text.isEmpty {
+                store.appendStream(botID: resolvedBot.id, sessionID: sessionID, text: text)
+            }
+        case "message.complete":
+            if let text = data["text"] as? String {
+                store.finishStream(botID: resolvedBot.id, sessionID: sessionID, finalText: text)
+                if let sid = sessionID {
+                    store.bindPreferredSession(botID: resolvedBot.id, sessionID: sid)
+                }
+                Task { await loadHistory() }
+            }
+        default:
+            break
         }
     }
 
@@ -341,7 +372,10 @@ struct ChatView: View {
                 params: ["session_id": sid, "text": text]
             )
             store.setPreview(for: resolvedBot.id, preview: text)
-            try? await Task.sleep(nanoseconds: 600_000_000)
+            // Streaming owns the live reply (RelayEvent → appendStream). The
+            // fallback reload keeps things consistent if events were missed
+            // (e.g. reconnect mid-turn) — harmless duplicate refresh.
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
             await loadHistory()
         } catch {
             errorText = error.localizedDescription

@@ -91,15 +91,22 @@ final class ChatStore: ObservableObject {
                             // keep the tombstone status so it stays hidden.
                             b.status = .tombstoned
                         }
+                        // Keep the previous timestamp unless content changed —
+                        // otherwise every refresh rewrites UserDefaults.
+                        b.updatedAt = old.updatedAt
                     }
                     if let pref = preferredSessions[b.id] {
                         b.preferredSessionID = pref
                     }
-                    b.updatedAt = Date()
                     return b
                 }
                 let others = bots.filter { $0.serverID != server.id }
-                bots = others + merged
+                let next = others + merged
+                // Publish only on real change (Equatable ignores nothing here;
+                // field-level updates above already mutate copies).
+                if next != bots {
+                    bots = next
+                }
             } catch {
                 os_log("roster refresh failed for %{public}@: %{public}@",
                        log: log, type: .error, server.id, error.localizedDescription)
@@ -198,5 +205,41 @@ final class ChatStore: ObservableObject {
         updated.updatedAt = Date()
         bots[idx] = updated
         bots = bots  // re-publish
+    }
+
+    // MARK: - Streaming (live assistant output)
+
+    /// Accumulate a streaming assistant reply under a synthetic item id
+    /// `stream:<sessionID>`; `finishStream` seals it into the timeline.
+    func appendStream(botID: String, sessionID: String?, text: String) {
+        let key = "stream:\(sessionID ?? "pending")"
+        var items = chats[botID] ?? []
+        if let idx = items.firstIndex(where: { $0.id == key }) {
+            let old = items[idx]
+            items[idx] = TimelineItem(id: key, type: "assistant",
+                                      text: (old.text ?? "") + text,
+                                      markdown: nil, title: nil,
+                                      timestamp: old.timestamp, toolName: nil, toolCalls: nil)
+        } else {
+            items.append(TimelineItem(id: key, type: "assistant", text: text,
+                                      markdown: nil, title: nil,
+                                      timestamp: ISO8601DateFormatter().string(from: Date()),
+                                      toolName: nil, toolCalls: nil))
+        }
+        chats[botID] = Array(items.suffix(200))
+    }
+
+    func finishStream(botID: String, sessionID: String?, finalText: String? = nil) {
+        let key = "stream:\(sessionID ?? "pending")"
+        guard var items = chats[botID] else { return }
+        guard let idx = items.firstIndex(where: { $0.id == key }) else { return }
+        var item = items[idx]
+        if let finalText {
+            item = TimelineItem(id: item.id, type: "assistant", text: finalText,
+                                markdown: nil, title: nil, timestamp: item.timestamp,
+                                toolName: nil, toolCalls: nil)
+        }
+        items[idx] = item
+        chats[botID] = Array(items.suffix(200))
     }
 }

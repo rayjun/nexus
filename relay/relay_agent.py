@@ -450,6 +450,12 @@ class MobileRelayClient:
 
     async def _dash_reader(self) -> None:
         """Single reader: match responses by id, push events aside."""
+        # Mobile streaming: whitelisted live events are forwarded to the app
+        # (encrypted, same channel). Non-listed events (approval.*, cron.*,
+        # session.* etc.) stay poll-based to keep the phone's surface minimal.
+        forward_types = {
+            "message.start", "message.delta", "message.interim", "message.complete",
+        }
         try:
             async for raw in self.dash_ws:
                 msg = json.loads(raw)
@@ -458,8 +464,22 @@ class MobileRelayClient:
                     fut = self._dash_pending.pop(mid)
                     if not fut.done():
                         fut.set_result(msg.get("result", {}))
-                # Events (no id) are intentionally ignored here; the mobile
-                # client polls, so live pushes are out of scope for now.
+                elif msg.get("method") == "event":
+                    etype = ((msg.get("params") or {}).get("type")) or ""
+                    if etype in forward_types and self.send_key is not None and self.channel_id:
+                        # Re-emit as a JSON-RPC event toward the app.
+                        fwd = {
+                            "jsonrpc": "2.0",
+                            "method": "event",
+                            "params": msg.get("params", {}),
+                        }
+                        try:
+                            wire = encrypt_jsonrpc(fwd, self.send_key, self.send_seq, self.channel_id)
+                            await self._send_data(wire)
+                            self.send_seq += 1
+                            save_sequence(MOBILE_DIR / "send_seq", self.send_seq)
+                        except Exception as e:
+                            log.warning("event forward failed: %s", e)
         except Exception as e:
             log.warning("dashboard reader ended: %s", e)
             # Fail all pending on disconnect so callers don't hang
