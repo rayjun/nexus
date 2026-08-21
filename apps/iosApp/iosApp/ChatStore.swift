@@ -1,6 +1,16 @@
 import Foundation
 import os.log
 
+/// Minimal surface ChatStore needs from the transport — a protocol so the
+/// store's business logic (merge/tombstone/prune/preferred) is unit-testable
+/// with a fake.
+protocol RelayClientProtocol: AnyObject {
+    var servers: [ServerProfile] { get }
+    func call(serverID: String, method: String, params: [String: Any]) async throws -> Any
+}
+
+extension RelayClient: RelayClientProtocol {}
+
 @MainActor
 final class ChatStore: ObservableObject {
     @Published var bots: [Bot] {
@@ -13,10 +23,10 @@ final class ChatStore: ObservableObject {
         didSet { BotStore.savePreferred(preferredSessions) }
     }
 
-    private let relay: RelayClient
+    private let relay: RelayClientProtocol
     private let log = OSLog(subsystem: "com.rayjun.nexus", category: "ChatStore")
 
-    init(relay: RelayClient) {
+    init(relay: RelayClientProtocol) {
         self.relay = relay
         bots = BotStore.loadRoster()
         chats = BotStore.loadChats()
@@ -76,6 +86,11 @@ final class ChatStore: ObservableObject {
                     if let old = existing.first(where: { $0.name == freshBot.name }) {
                         b.preferredSessionID = old.preferredSessionID
                         b.isTombstoned = old.isTombstoned
+                        if old.isTombstoned {
+                            // A tombstoned bot must NOT resurrect to .online —
+                            // keep the tombstone status so it stays hidden.
+                            b.status = .tombstoned
+                        }
                     }
                     if let pref = preferredSessions[b.id] {
                         b.preferredSessionID = pref

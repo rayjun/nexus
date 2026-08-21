@@ -1,13 +1,20 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
-/// TG-style attach panel: Photo / File / Camera. v2 ships pickers only —
-/// the attachment is sent as a text note accompanying the prompt (server
-/// has no file-attach RPC on the low-trust allowlist).
+/// TG-style attach panel: Photo / File / Camera. Attachments are staged as
+/// text annotations next to the compose field, then sent as part of the
+/// prompt (`[📎 file.pdf] ...`). The low-trust relay has no file-attach RPC,
+/// so the attachment is a named reference the bot can read locally.
 struct AttachPanel: View {
-    @State private var photoItem: PhotosPickerItem?
-    @State private var fileName = ""
+    var onAttach: (AttachKind) -> Void
     @State private var showDocPicker = false
+
+    enum AttachKind: Equatable {
+        case photo(String)      // display name
+        case file(String)       // file name
+        case camera             // capture stub
+    }
 
     var body: some View {
         HStack(spacing: 16) {
@@ -27,8 +34,7 @@ struct AttachPanel: View {
             }
             .buttonStyle(.plain)
             Button {
-                // Camera capture — v2 placeholder (permission flow in follow-up)
-                fileName = "📷 camera attach — coming soon"
+                onAttach(.camera)
             } label: {
                 VStack(spacing: 6) {
                     IconTile(systemName: "camera", tint: NexusStyle.blue)
@@ -42,11 +48,41 @@ struct AttachPanel: View {
         .padding(.vertical, 14)
         .background(NexusStyle.background2)
         .overlay(alignment: .top) { Divider().overlay(NexusStyle.border) }
-        .fileImporter(isPresented: $showDocPicker, allowedContentTypes: [.data]) { result in
+        .fileImporter(isPresented: $showDocPicker, allowedContentTypes: [.data, .pdf, .text, .image]) { result in
             if case .success(let url) = result {
-                fileName = url.lastPathComponent
+                onAttach(.file(url.lastPathComponent))
             }
         }
+    }
+
+    @State private var photoItem: PhotosPickerItem?
+}
+
+/// Staged attachment chip — sits above the input bar while composing.
+struct AttachChip: View {
+    let label: String
+    var onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "paperclip")
+                .font(.system(size: 11))
+                .foregroundStyle(NexusStyle.blue)
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(NexusStyle.text)
+                .lineLimit(1)
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(NexusStyle.subtleText)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
     }
 }
 

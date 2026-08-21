@@ -17,6 +17,7 @@ struct ChatView: View {
     @State private var errorText = ""
     @State private var activeSessionID: String?
     @State private var panel: ChatPanel = .none
+    @State private var stagedAttach: String?
     @FocusState private var inputFocused: Bool
 
     private let log = OSLog(subsystem: "com.rayjun.nexus", category: "ChatView")
@@ -118,6 +119,14 @@ struct ChatView: View {
 
     private var inputBar: some View {
         VStack(spacing: 0) {
+            if let staged = stagedAttach {
+                HStack {
+                    AttachChip(label: staged) { stagedAttach = nil }
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 4)
+            }
             if input.hasPrefix("/") {
                 CommandSuggestCard(input: $input)
                     .padding(.bottom, 8)
@@ -176,8 +185,17 @@ struct ChatView: View {
                 EmojiPanel(input: $input)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             case .attach:
-                AttachPanel()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                AttachPanel { kind in
+                    switch kind {
+                    case .photo(let name):
+                        stagedAttach = "📷 \(name)"
+                    case .file(let name):
+                        stagedAttach = "📎 \(name)"
+                    case .camera:
+                        stagedAttach = "📷 camera capture"
+                    }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.easeOut(duration: 0.18), value: panel)
@@ -294,13 +312,23 @@ struct ChatView: View {
     // MARK: - Send / interrupt
 
     private func send() async {
-        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let staged = stagedAttach {
+            // Staged attachment rides along as a text reference the bot can
+            // open locally (no file-attach RPC on the low-trust allowlist).
+            if text.isEmpty {
+                text = "[\(staged)]"
+            } else {
+                text = "[\(staged)] \(text)"
+            }
+        }
         guard !text.isEmpty, !isSending else { return }
         isSending = true
         defer { isSending = false }
         await ensureActiveServer()
         guard relay.isConnected else { errorText = "Not connected"; return }
         input = ""
+        stagedAttach = nil
         errorText = ""
         // Ensure session exists before submitting (prompt.submit is
         // streaming-only and cannot create; "new" is NOT resolvable).
