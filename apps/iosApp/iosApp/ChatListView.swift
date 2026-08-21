@@ -50,9 +50,6 @@ struct ChatListView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RelayPaired"))) { _ in
             Task { await store.refreshRoster() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowPairingView"))) { _ in
-            isShowingSettings = true
-        }
         .fullScreenCover(item: $selectedBot) { bot in
             ChatView(bot: bot, store: store)
         }

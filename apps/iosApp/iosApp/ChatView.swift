@@ -198,9 +198,13 @@ struct ChatView: View {
     // MARK: - Session resolution (T5 acceptance)
 
     private func ensureActiveServer() async {
-        var server = relay.servers.first { $0.id == resolvedBot.serverID }
-        if server == nil, !relay.servers.isEmpty { server = relay.servers.first }
-        guard let server else { errorText = "No server available"; return }
+        // Strict: the bot's own server must exist. Falling back to another
+        // server would create sessions under this profile name on the WRONG
+        // host (cross-server misrouting) — fail loudly instead.
+        guard let server = relay.servers.first(where: { $0.id == resolvedBot.serverID }) else {
+            errorText = "Server for \"\(resolvedBot.displayTitle)\" is gone — remove and re-add the bot"
+            return
+        }
         if relay.activeServerID != server.id {
             relay.setActive(serverID: server.id)
         }

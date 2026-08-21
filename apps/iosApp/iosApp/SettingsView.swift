@@ -105,7 +105,13 @@ struct ServersView: View {
                         Spacer()
                         if !server.isOnline {
                             Button("Re-pair") {
+                                // Drop the orphaned profile + its bots BEFORE
+                                // re-pairing: removeServer generates a NEW server
+                                // UUID, so without pruneServer the old server's
+                                // bots would linger as ghosts (stale preview,
+                                // tappable, misrouted).
                                 relay.removeServer(serverID: server.id)
+                                store.pruneServer(server.id)
                                 isPairing = true
                             }
                             .font(.system(size: 13, weight: .semibold))

@@ -26,9 +26,19 @@ final class ChatStore: ObservableObject {
     // MARK: Roster
 
     /// Refresh the roster from every paired server (server truth). Offline
-    /// servers keep their last-good cache (dimmed in UI). Tombstoned bots are
-    /// filtered out on merge — a re-pull must not resurrect a local delete.
+    /// servers keep their last-good cache, marked .offline (dimmed in UI).
+    /// Tombstoned bots are filtered out on merge — a re-pull must not
+    /// resurrect a local delete.
     func refreshRoster() async {
+        let onlineIDs = Set(relay.servers.filter(\.isOnline).map(\.id))
+        // Mark cached bots of offline servers .offline first.
+        var statusChanged = false
+        for i in bots.indices where bots[i].status == .online && !onlineIDs.contains(bots[i].serverID) {
+            bots[i].status = .offline
+            statusChanged = true
+        }
+        if statusChanged { bots = bots }
+
         for server in relay.servers {
             if !server.isOnline { continue }
             do {
@@ -111,13 +121,14 @@ final class ChatStore: ObservableObject {
     }
 
     func renameBot(_ bot: Bot, displayName: String) async throws {
-        var params: [String: Any] = [:]
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { params["display_name"] = trimmed }
-        if !bot.descriptor.isEmpty { params["description"] = bot.descriptor }
-        _ = try await relay.call(serverID: bot.serverID, method: "profiles.configure", params: params)
+        guard !trimmed.isEmpty else { return }
+        // Send ONLY display_name — re-sending the cached descriptor could
+        // clobber server-side description edits made elsewhere.
+        _ = try await relay.call(serverID: bot.serverID, method: "profiles.configure",
+                                 params: ["display_name": trimmed])
         var b = bot
-        b.displayName = trimmed.isEmpty ? bot.displayName : trimmed
+        b.displayName = trimmed
         upsert(b)
     }
 
