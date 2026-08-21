@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nexus v2 — UI Mock</title>
+<style>
+  :root{
+    --bg:#0d0f12; --bg2:#12151a; --surface:#171a20; --surface2:#1e222a;
+    --text:#eceef2; --muted:#8b919c; --faint:#5c6270;
+    --border:#23272f; --accent:#3b82f6; --accent2:#2456c4;
+    --green:#22c55e; --orange:#f59e0b; --red:#ef4444;
+    --radius:14px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--font);background:#05060a;color:var(--text);
+       display:flex;gap:28px;justify-content:center;align-items:flex-start;
+       padding:36px 20px;flex-wrap:wrap}
+  h1.title{position:fixed;top:0;left:0;right:0;text-align:center;padding:14px;
+           background:#05060a;font-size:15px;color:var(--muted);z-index:5;
+           border-bottom:1px solid var(--border)}
+  .phone{width:372px;background:var(--bg);border:1px solid var(--border);
+         border-radius:34px;box-shadow:0 24px 70px rgba(0,0,0,.55);
+         overflow:hidden;margin-top:56px;min-height:760px;display:flex;flex-direction:column}
+  .phone .status{align-items:center;padding:10px 22px 4px;display:flex;
+         justify-content:space-between;font-size:12px;color:var(--faint)}
+  .screen{flex:1;position:relative}
+  /* top bar */
+  .bar{display:flex;align-items:center;justify-content:space-between;
+       padding:10px 18px 6px}
+  .bar .app{font-size:26px;font-weight:800;letter-spacing:-.5px}
+  .bar .actions{display:flex;gap:16px;align-items:center}
+  .bar .actions svg{width:21px;height:21px;stroke:var(--muted)}
+  .plus svg{stroke:var(--accent)}
+  .sub{display:flex;justify-content:space-between;padding:2px 20px 10px;
+       font-size:12px;color:var(--faint);align-items:center}
+  .sub .online{display:flex;align-items:center;gap:6px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block}
+  .dot.off{background:var(--faint)}
+  /* rows */
+  .list{flex:1;overflow:hidden}
+  .row{display:flex;align-items:center;gap:13px;padding:11px 20px;
+       border-bottom:1px solid var(--border);cursor:default;transition:background .15s}
+  .row:hover,.row.active{background:var(--surface)}
+  .avatar{width:46px;height:46px;border-radius:50%;flex:none;display:flex;
+          align-items:center;justify-content:center;font-weight:700;font-size:17px;
+          color:#fff}
+  .row.pinned .avatar{box-shadow:0 0 0 2px var(--bg),0 0 0 4px rgba(59,130,246,.4)}
+  .mid{flex:1;min-width:0}
+  .mid .top{display:flex;justify-content:space-between;align-items:baseline}
+  .mid .name{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px;min-width:0}
+  .mid .name b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tag{font-size:9.5px;color:var(--muted);border:1px solid var(--border);
+       padding:1px 6px;border-radius:6px;font-weight:500;letter-spacing:.3px;
+       text-transform:uppercase;flex:none}
+  .time{font-size:11px;color:var(--faint);flex:none}
+  .preview{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;
+           text-overflow:ellipsis;margin-top:2px}
+  .preview .you{color:var(--faint)}
+  .typing{color:var(--accent);font-style:italic}
+  .badge{background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;
+         border-radius:9px;padding:1px 6px;flex:none}
+  .more{color:var(--faint);font-size:13px;flex:none;font-weight:600;
+        padding:4px 2px;letter-spacing:0}
+  .swipe{position:absolute;right:0;top:0;bottom:0;width:88px;
+         background:var(--accent);color:#fff;display:flex;flex-direction:column;
+         align-items:center;justify-content:center;gap:3px;font-size:10.5px;font-weight:600}
+  .row.sw>{padding-right:88px}
+  .row.off .avatar{filter:grayscale(.6);opacity:.6}
+  .row.off .mid{opacity:.55}
+  /* sidebar labels */
+  .grouplabel{padding:14px 20px 6px;font-size:11px;font-weight:700;color:var(--faint);
+              letter-spacing:1.2px;text-transform:uppercase}
+  /* create sheet */
+  .sheet{position:absolute;inset:0;background:var(--bg2);border-radius:34px 34px 0 0;
+         padding:18px 20px}
+  .handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
+  .sheet h2{font-size:18px;font-weight:700;margin-bottom:4px}
+  .sheet .cap{font-size:12px;color:var(--muted);margin-bottom:18px}
+  .field{margin-bottom:14px}
+  .field label{font-size:11.5px;color:var(--faint);display:block;margin-bottom:5px;font-weight:600}
+  .field input,.field textarea,.field select{width:100%;background:var(--surface);
+        border:1px solid var(--border);border-radius:10px;color:var(--text);
+        padding:10px 12px;font-size:14px;font-family:inherit;outline:none}
+  .field textarea{resize:none;height:56px}
+  .field input:focus,.field textarea:focus{border-color:var(--accent)}
+  .seg{display:flex;gap:8px}
+  .seg .opt{flex:1;text-align:center;padding:8px;border:1px solid var(--border);
+        border-radius:10px;font-size:12.5px;color:var(--muted);cursor:default}
+  .seg .opt.sel{border-color:var(--accent);color:var(--accent);background:rgba(59,130,246,.08)}
+  .btn{display:block;width:100%;background:var(--accent);color:#fff;border:none;
+       border-radius:12px;padding:13px;font-size:15px;font-weight:600;margin-top:8px;
+       font-family:inherit;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+  /* chat */
+  .chathead{display:flex;align-items:center;gap:11px;padding:10px 18px;
+            border-bottom:1px solid var(--border);background:var(--bg)}
+  .chathead .avatar{width:34px;height:34px;font-size:14px}
+  .chathead .cn{font-size:15px;font-weight:700}
+  .chathead .cs{font-size:11px;color:var(--green)}
+  .msgarea{flex:1;overflow:hidden;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+  .bub{max-width:78%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.45}
+  .bub.in{background:var(--surface);border-top-left-radius:5px;align-self:flex-start}
+  .bub.out{background:var(--accent2);color:#fff;border-top-right-radius:5px;align-self:flex-end}
+  .bub .ts{font-size:10px;opacity:.55;margin-top:4px;text-align:right}
+  .typerow{display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--border);align-items:center}
+  .typerow .inp{width:100%;background:var(--surface);border:1px solid var(--border);
+        border-radius:22px;padding:10px 16px;font-size:14px;color:var(--text);outline:none}
+
+  .inpwrap{position:relative;flex:1;display:flex}
+  .inpwrap .inp{width:100%;padding-right:38px}
+  .emojibtn{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+            font-size:18px;cursor:pointer;line-height:1}
+
+  .send{width:38px;height:38px;border-radius:50%;background:var(--accent);flex:none;
+        display:flex;align-items:center;justify-content:center}
+  .send svg{width:18px;height:18px;stroke:#fff;margin-left:-2px;margin-top:1px}
+
+  .typerow .ic{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none}
+  .typerow .ic svg{width:21px;height:21px;stroke:var(--muted)}
+  .panel{position:absolute;left:0;right:0;bottom:0;background:var(--bg2);
+         border-top:1px solid var(--border);padding:14px 18px 18px;border-radius:22px 22px 0 0;
+         animation:slide .18s ease}
+  @keyframes slide{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+  .panel .phead{display:flex;gap:10px;margin-bottom:12px}
+  .panel .tab{font-size:12.5px;font-weight:600;color:var(--muted);padding:6px 14px;
+         border-radius:999px;background:var(--surface)}
+  .panel .tab.on{background:var(--accent);color:#fff}
+  .grid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+  .grid span{font-size:24px;text-align:center;padding:6px 0;border-radius:10px;cursor:default}
+  .grid span:hover{background:var(--surface)}
+  .attach{display:flex;gap:14px;flex-wrap:wrap}
+  .attach .a{width:64px;text-align:center}
+  .attach .a .ic{width:54px;height:54px;border-radius:16px;background:var(--surface);
+         display:flex;align-items:center;justify-content:center;margin:0 auto 6px}
+  .attach .a .ic svg{width:24px;height:24px;stroke:var(--accent)}
+  .attach .a .lbl{font-size:11px;color:var(--muted)}
+
+  /* ── TG command popup / attach menu ── */
+  .cmdbar{position:absolute;left:14px;right:14px;bottom:76px;background:var(--surface);
+         border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.35);
+         overflow:hidden;z-index:3}
+  .cmdbar .ci{display:flex;align-items:center;gap:11px;padding:11px 16px;font-size:13.5px;cursor:default}
+  .cmdbar .ci:not(:last-child){border-bottom:1px solid var(--border)}
+  .cmdbar .ci:hover,.cmdbar .ci.sel{background:var(--surface2)}
+  .cmdbar .ci .slug{font-weight:700;color:var(--accent);min-width:74px;font-size:13px}
+  .cmdbar .ci .desc{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cmdbar .ci.on{display:flex}
+
+
+  /* settings */
+  .setrow{display:flex;align-items:center;gap:11px;padding:13px 20px;border-bottom:1px solid var(--border)}
+  .setrow .lbl{font-size:14px}
+  .setrow .sub2{font-size:12px;color:var(--muted);margin-top:1px}
+  .setrow .st{font-size:11px;color:var(--green);margin-left:auto;font-weight:600}
+  .setrow .st.off{color:var(--orange)}
+  .footnote{padding:14px 20px 20px;font-size:12px;color:var(--faint);line-height:1.5}
+  .back{display:inline-flex;align-items:center;gap:5px;color:var(--accent);font-size:13px;font-weight:600;margin-bottom:12px;cursor:pointer}
+
+  /* ── light theme override ── */
+  body.light{--bg:#f2f3f7;--bg2:#fafbfd;--surface:#ffffff;--surface2:#f4f5f9;
+       --text:#17181c;--muted:#555c6b;--faint:#9aa1af;
+       --border:#e2e5ec;--accent:#2f6fed;--accent2:#2555c4;
+       --green:#16a34a;--orange:#d97706;--red:#dc2626}
+  body.light{background:#f2f3f7;color:var(--text)}
+  body.light .phone{box-shadow:0 24px 60px rgba(30,41,59,.16)}
+  body.light .row:hover,body.light .row.active{background:#e9edf4}
+  body.light .bub.in{background:#e8ecf3}
+  body.light .typerow,body.light .chathead{border-color:var(--border)}
+  body.light h1.title{background:#f2f3f7;color:var(--muted)}
+</style>
+</head>
+<body class="light">
+
+<button id="themeBtn" onclick="document.body.classList.toggle('light');this.textContent=document.body.classList.contains('light')?'Dark':'Light'"
+  style="position:fixed;top:8px;right:12px;z-index:99;background:var(--accent);color:#fff;border:none;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;font-family:var(--font);cursor:pointer">Dark</button>
+
+<h1 class="title">Nexus v2 — Grok-style minimal · 4 screens</h1>
+
+<!-- ════════════ SCREEN 1 : Chat list (home) ══════════════ -->
+<div class="phone">
+  <div class="status"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="screen">
+    <div class="bar">
+      <svg fill="none" stroke-width="1.6" viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--text)"><path d="M11 4a7 7 0 107 7M11 4a7 7 0 11-7 7M21 21l-4.3-4.3"/></svg>
+      <div class="actions">
+        <svg class="plus" fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <svg fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      </div>
+    </div>
+    <div class="list">
+      <div class="row active">
+        <div class="avatar" style="background:#3b82f6">A</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Alex</b></div>
+            <span class="time">9:41</span>
+          </div>
+          <div class="preview"><span class="you">You:</span> can you review the PR?</div>
+        </div>
+        <span class="more">•••</span>
+      </div>
+      <div class="row">
+        <div class="avatar" style="background:#8b5cf6">R</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Research Bot</b><span class="tag">arch</span></div>
+            <span class="time">8:12</span>
+          </div>
+          <div class="preview">here's the summary of the latest results…</div>
+        </div>
+        <span class="more">•••</span>
+      </div>
+      <div class="row">
+        <div class="avatar" style="background:#22c55e">D</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Dev Helper</b><span class="tag">laptop</span></div>
+            <span class="time">07:30</span>
+          </div>
+          <div class="preview typing">typing…</div>
+        </div>
+        <span class="more">•••</span>
+      </div>
+      <div class="row off">
+        <div class="avatar" style="background:#64748b">M</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Memory Bot</b></div>
+            <span class="badge">offline</span>
+          </div>
+          <div class="preview">Last seen 2h ago · re-pair in Settings</div>
+        </div>
+        <span class="more">•••</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SCREEN 2 : Create bot sheet ══════════════ -->
+<div class="phone">
+  <div class="status"><span>9:42</span><span></span><span></span></div>
+  <div class="screen">
+    <div class="list">
+      <div class="row" style="opacity:.85">
+        <div class="avatar" style="background:#3b82f6">A</div>
+        <div class="mid"><div class="top"><div class="name"><b>Alex</b></div></div>
+        <div class="preview">can you review the PR?</div></div></div>
+    </div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <h2>New bot</h2>
+      <div class="cap">Creates a new Hermes profile on the selected server.</div>
+      <div class="field">
+        <label>NAME (slug, required)</label>
+        <input value="writer" placeholder="e.g. writer">
+      </div>
+      <div class="field">
+        <label>SERVER</label>
+        <select><option>arch (arch.home — online)</option><option>laptop (192.168… — offline)</option></select>
+      </div>
+      <div class="field">
+        <label>PERSONALITY / SOUL (optional)</label>
+        <textarea placeholder="You are a concise technical writer…"></textarea>
+      </div>
+      <div class="field">
+        <label>MODEL</label>
+        <div class="seg">
+          <div class="opt sel">Default</div>
+          <div class="opt">glm-5.2</div>
+          <div class="opt">gpt-5</div>
+        </div>
+      </div>
+      <button class="btn">Create bot</button>
+      <button class="btn ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SCREEN 3 : Chat ══════════════ -->
+<div class="phone">
+  <div class="status"><span>9:43</span><span></span><span></span></div>
+  <div class="screen" style="display:flex;flex-direction:column">
+    <div class="chathead">
+      <div class="avatar" style="background:#3b82f6">A</div>
+      <div style="flex:1">
+        <div class="cn">Alex</div>
+        <div class="cs">● online</div>
+      </div>
+      <svg style="width:20px;height:20px;stroke:var(--muted)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+    </div>
+    <div class="msgarea">
+      <div class="bub in">Hey Alex, can you review the changes in the relay PR?<div class="ts">9:38</div></div>
+      <div class="bub out">Sure — I've started the review. Focusing on the E2E key exchange.<div class="ts">9:38</div></div>
+      <div class="bub in">Found one issue: crypto_box_beforenm vs raw scalarmult mismatch.<div class="ts">9:40</div></div>
+      <div class="bub out">Good catch. Fixing now, will paste the verified vectors after.<div class="ts">9:41</div></div>
+    </div>
+    <div class="typerow">
+      <div class="ic" style="font-size:19px">📎</div>
+      <div class="inpwrap"><input class="inp" placeholder="Message Alex…"><span class="emojibtn" onclick="toggleEmoji()" style="cursor:pointer">😊</span></div>
+      <div class="send"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+    </div>
+    <!-- TG-style emoji/attach panel (toggled) -->
+    <div class="panel" id="emojiPanel" style="bottom:64px;display:none">
+      <div class="phead">
+        <div class="tab on">Emoji</div>
+        <div class="tab">Stickers</div>
+        <div class="tab">Files</div>
+      </div>
+      <div class="grid">
+        <span>😀</span><span>😂</span><span>😊</span><span>🤔</span><span>👍</span><span>🔥</span><span>🎉</span><span>❤️</span>
+        <span>✅</span><span>❌</span><span>⚠️</span><span>🔧</span><span>📎</span><span>📁</span><span>💾</span><span>🚀</span>
+        <span>🐛</span><span>🧪</span><span>📄</span><span>🗂</span><span>📈</span><span>💡</span><span>🧠</span><span>🤝</span>
+        <span>⚡</span><span>🔒</span><span>🛡</span><span>🌐</span><span>📦</span><span>🧹</span><span>🔄</span><span>⏱</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SCREEN 3b : Chat — input collapsed ══════════════ -->
+<div class="phone">
+  <div class="status"><span>9:43</span><span></span><span></span></div>
+  <div class="screen" style="display:flex;flex-direction:column">
+    <div class="chathead">
+      <div class="avatar" style="background:#3b82f6">A</div>
+      <div style="flex:1">
+        <div class="cn">Alex</div>
+        <div class="cs">● online</div>
+      </div>
+      <svg style="width:20px;height:20px;stroke:var(--muted)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+    </div>
+    <div class="msgarea">
+      <div class="bub in">Hey Alex, can you review the changes in the relay PR?<div class="ts">9:38</div></div>
+      <div class="bub out">Sure — I've started the review. Focusing on the E2E key exchange.<div class="ts">9:38</div></div>
+      <div class="bub in">Found one issue: crypto_box_beforenm vs raw scalarmult mismatch.<div class="ts">9:40</div></div>
+      <div class="bub out">Good catch. Fixing now, will paste the verified vectors after.<div class="ts">9:41</div></div>
+    </div>
+    <div class="typerow">
+      <div class="ic" style="font-size:19px">📎</div>
+      <div class="inpwrap"><input class="inp" placeholder="Message Alex…"><span class="emojibtn">😊</span></div>
+      <div class="send"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SCREEN 3c : Chat — / command popup ══════════════ -->
+<div class="phone">
+  <div class="status"><span>9:43</span><span></span></div>
+  <div class="screen" style="display:flex;flex-direction:column">
+    <div class="chathead">
+      <div class="avatar" style="background:#8b5cf6">R</div>
+      <div style="flex:1">
+        <div class="cn">Research Bot</div>
+        <div class="cs">● online</div>
+      </div>
+      <svg style="width:20px;height:20px;stroke:var(--muted)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+    </div>
+    <div class="msgarea">
+      <div class="bub out">How do I query the latest relay stats?<div class="ts">9:35</div></div>
+      <div class="bub in">You can use /status, or ask me directly — I'll run it.<div class="ts">9:36</div></div>
+    </div>
+    <div class="cmdbar">
+      <div class="ci sel"><span class="slug">/status</span><span class="desc">Show server &amp; relay status</span></div>
+      <div class="ci"><span class="slug">/help</span><span class="desc">List available commands</span></div>
+      <div class="ci"><span class="slug">/agents</span><span class="desc">List agents &amp; sessions</span></div>
+      <div class="ci"><span class="slug">/model</span><span class="desc">Switch or show model</span></div>
+    </div>
+    <div class="typerow">
+      <div class="ic" style="font-size:19px">📎</div>
+      <div class="inpwrap"><input class="inp" placeholder="Message Research Bot…" value="/st"><span class="emojibtn">😊</span></div>
+      <div class="send"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SCREEN 3d : Chat — attach menu ══════════════ -->
+<div class="phone">
+  <div class="status"><span>9:44</span><span></span></div>
+  <div class="screen" style="display:flex;flex-direction:column">
+    <div class="chathead">
+      <div class="avatar" style="background:#22c55e">D</div>
+      <div style="flex:1">
+        <div class="cn">Dev Helper</div>
+        <div class="cs">● online</div>
+      </div>
+      <svg style="width:20px;height:20px;stroke:var(--muted)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+    </div>
+    <div class="msgarea">
+      <div class="bub in">Attach the benchmark logs and I'll run the diff.<div class="ts">9:40</div></div>
+    </div>
+    <div class="panel" id="attachPanel" style="bottom:64px;display:none">
+      <div class="phead">
+        <div class="tab">Emoji</div>
+        <div class="tab">Stickers</div>
+        <div class="tab on">Files</div>
+      </div>
+      <div class="attach">
+        <div class="a"><div class="ic"><svg fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg></div><div class="lbl">Photo</div></div>
+        <div class="a"><div class="ic"><svg fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M13 2v7h7"/></svg></div><div class="lbl">File</div></div>
+        <div class="a"><div class="ic"><svg fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M12 2a5 5 0 015 5v5a5 5 0 01-10 0V7a5 5 0 015-5z"/><path d="M3.5 10v2a8.5 8.5 0 0017 0v-2"/></svg></div><div class="lbl">Camera</div></div>
+      </div>
+    </div>
+    <div class="typerow">
+      <div class="ic" id="attachBtn" onclick="toggleAttach()" style="font-size:19px;background:var(--surface);cursor:pointer">📎</div>
+      <div class="inpwrap"><input class="inp" placeholder="Message Dev Helper…"><span class="emojibtn">😊</span></div>
+      <div class="send"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SCREEN 4 : Settings (general) ══════════════ -->
+<div class="phone">
+  <div class="status"><span>9:44</span><span></span><span></span></div>
+  <div class="screen">
+    <div class="bar"><div class="app" style="font-size:20px">Settings</div>
+      <div class="actions"><svg fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+    </div>
+    <div class="list">
+      <div class="setrow">
+        <div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🖥</div>
+        <div style="flex:1"><div class="lbl">Servers</div><div class="sub2">2 connected · pair &amp; manage</div></div>
+        <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="setrow"><div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🌗</div>
+        <div style="flex:1"><div class="lbl">Appearance</div><div class="sub2">Dark · System</div></div>
+        <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="setrow"><div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🔔</div>
+        <div style="flex:1"><div class="lbl">Notifications</div><div class="sub2">Approvals · Mentions</div></div>
+        <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="setrow"><div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🔒</div>
+        <div style="flex:1"><div class="lbl">Privacy & Security</div><div class="sub2">E2E keys · Keychain</div></div>
+        <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="setrow"><div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">ℹ️</div>
+        <div style="flex:1"><div class="lbl">About</div><div class="sub2">Nexus 0.20.0</div></div>
+        <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SCREEN 5 : Servers (sub-page of settings) ══════════════ -->
+<div class="phone">
+  <div class="status"><span>9:45</span><span></span></div>
+  <div class="screen">
+    <div class="bar">
+      <svg fill="none" stroke-width="2" viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--accent)"><path d="M15 6l-6 6 6 6"/></svg>
+      <div class="app" style="font-size:20px">Servers</div>
+      <div class="actions"><svg class="plus" fill="none" stroke-width="2" viewBox="0 0 24 24" style="width:21px;height:21px;stroke:var(--accent)"><path d="M12 5v14M5 12h14"/></svg></div>
+    </div>
+    <div class="list">
+      <div class="setrow">
+        <div class="avatar" style="width:34px;height:34px;font-size:13px;background:#3b82f6">A</div>
+        <div style="flex:1"><div class="lbl">arch</div><div class="sub2">wss://relay.example.com · 3 bots</div></div>
+        <span class="st">● online</span>
+      </div>
+      <div class="setrow">
+        <div class="avatar" style="width:34px;height:34px;font-size:13px;background:#8b5cf6">L</div>
+        <div style="flex:1"><div class="lbl">laptop</div><div class="sub2">wss://relay2.example.com · 0 bots</div></div>
+        <span class="st off">● offline · Re-pair</span>
+      </div>
+      <div style="height:16px"></div>
+      <div style="height:16px"></div>
+    </div>
+  </div>
+</div>
+
+<div style="position:fixed;bottom:14px;right:20px;font-size:12px;color:var(--faint)">
+  Nexus v2 design mock · concept reset: bot = Hermes profile
+</div>
+
+<script>
+function toggleEmoji(){
+  var p=document.getElementById('emojiPanel'), a=document.getElementById('attachPanel');
+  var on=p.style.display==='none';
+  p.style.display=on?'block':'none';
+  if(a) a.style.display='none';
+}
+function toggleAttach(){
+  var p=document.getElementById('attachPanel'), e=document.getElementById('emojiPanel');
+  var on=p.style.display==='none';
+  p.style.display=on?'block':'none';
+  if(e) e.style.display='none';
+}
+</script>
+</body>
+</html>
