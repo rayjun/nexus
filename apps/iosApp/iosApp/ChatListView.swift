@@ -8,6 +8,8 @@ struct ChatListView: View {
     @EnvironmentObject private var relay: RelayClient
 
     @State private var searchText = ""
+    @State private var isSearchActive = false
+    @FocusState private var searchFocused: Bool
     @State private var isShowingCreate = false
     @State private var isShowingSettings = false
     @State private var selectedBot: Bot?
@@ -82,18 +84,32 @@ struct ChatListView: View {
         }
     }
 
+    /// Two states: idle (search icon + create + settings) and searching
+    /// (field + Cancel) — the search field only appears after tapping the
+    /// magnifier (TG-style), never before.
     private var topBar: some View {
+        Group {
+            if isSearchActive {
+                searchBar
+            } else {
+                idleBar
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .animation(.easeOut(duration: 0.18), value: isSearchActive)
+    }
+
+    private var idleBar: some View {
         HStack(spacing: 16) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(NexusStyle.text)
-                .onTapGesture { /* search field is the list header below */ }
-            // Search field (TG-like: tapped-in-place)
-            TextField("Search", text: $searchText)
-                .font(.system(size: 15))
-                .foregroundStyle(NexusStyle.text)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+            Button {
+                isSearchActive = true
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(NexusStyle.text)
+            }
+            .buttonStyle(.plain)
             Spacer()
             Button {
                 isShowingCreate = true
@@ -112,8 +128,39 @@ struct ChatListView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(NexusStyle.subtleText)
+            TextField("Search bots", text: $searchText)
+                .font(.system(size: 15))
+                .foregroundStyle(NexusStyle.text)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .focused($searchFocused)
+                .submitLabel(.search)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15))
+                        .foregroundStyle(NexusStyle.subtleText)
+                }
+                .buttonStyle(.plain)
+            }
+            Button("Cancel") {
+                searchText = ""
+                isSearchActive = false
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(NexusStyle.blue)
+            .buttonStyle(.plain)
+        }
+        .onAppear { searchFocused = true }
     }
 
     private var rosterList: some View {
