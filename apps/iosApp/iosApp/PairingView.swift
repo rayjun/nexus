@@ -1,6 +1,13 @@
 import SwiftUI
 
 struct PairingView: View {
+    /// Optional external payload (nexus:// deep link) — pre-fills the form
+    /// and shows the confirmation alert exactly like a scanned QR.
+    /// When `autoPair` is true (external deep link: user intent is explicit),
+    /// parsing a valid payload starts pairing immediately.
+    var pendingPayload: String? = nil
+    var autoPair: Bool = false
+
     @State private var relayUrl = ""
     @State private var code = ""
     @State private var serverName = ""
@@ -139,6 +146,19 @@ struct PairingView: View {
                     ?? (Bundle.main.object(forInfoDictionaryKey: "NexusRelayURL") as? String)
                     ?? "wss://relay.example.com/relay"
             }
+            // External deep-link payload (nexus://…) — same path as a QR scan.
+            if let payload = pendingPayload {
+                if autoPair {
+                    // Deep link: intent explicit — parse and pair directly.
+                    let parsed = parseScannedPayload(payload)
+                    if let parsed {
+                        fillForm(from: parsed)
+                        startPairing()
+                    }
+                } else {
+                    handleScannedPayload(payload)
+                }
+            }
         }
         .onDisappear {
             // The view can be torn down mid-pairing (root swap) — never
@@ -174,10 +194,9 @@ struct PairingView: View {
     }
     @State private var pendingScan: ScannedPairing?
 
-    /// Scan step 1: parse the payload; if valid, ask the user to CONFIRM the
-    /// relay before filling the form (a hostile QR must not silently point
-    /// the app at an attacker-controlled relay).
-    private func handleScannedPayload(_ payload: String) {
+    /// Parse a nexus:// pairing payload → ScannedPairing (no side effects).
+    /// Errors are reported by setting isError/errorMessage for UI display.
+    private func parseScannedPayload(_ payload: String) -> ScannedPairing? {
         var normalized = payload
         if normalized.lowercased().hasPrefix("nexus://") {
             let body = String(normalized.dropFirst("nexus://".count))
@@ -193,29 +212,43 @@ struct PairingView: View {
               let host = url.host else {
             isError = true
             errorMessage = "Not a valid Nexus pairing QR"
-            return
+            return nil
         }
         var hostPort = host
         if let port = url.port {
             hostPort += ":\(port)"
         }
-        let relay = "wss://\(hostPort)\(url.path)"
+        // DEBUG: a loopback/locahost pair uses ws:// (no TLS locally) —
+        // mirrors startPairing's schemeOK rule; production keeps wss://.
+        var scheme = "wss"
+        if isDebugBuild, host == "127.0.0.1" || host == "localhost" || host == "::1" {
+            scheme = "ws"
+        }
+        let relay = "\(scheme)://\(hostPort)\(url.path)"
         guard let comps = URLComponents(string: normalized),
               let codeValue = comps.queryItems?.first(where: { $0.name == "code" })?.value else {
             isError = true
             errorMessage = "Pairing QR is missing the code"
-            return
+            return nil
         }
         let trimmed = codeValue.uppercased()
         guard trimmed.count >= 8, trimmed.count <= 12,
               trimmed.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
             isError = true
             errorMessage = "Pairing code in QR is invalid"
-            return
+            return nil
         }
         let name = String((comps.queryItems?.first(where: { $0.name == "name" })?.value ?? "").prefix(64))
+        return ScannedPairing(relay: relay, code: trimmed, name: name)
+    }
+
+    /// Scan step 1: parse the payload; if valid, ask the user to CONFIRM the
+    /// relay before filling the form (a hostile QR must not silently point
+    /// the app at an attacker-controlled relay).
+    private func handleScannedPayload(_ payload: String) {
+        guard let parsed = parseScannedPayload(payload) else { return }
         // Show the confirmation alert before anything is applied.
-        pendingScan = ScannedPairing(relay: relay, code: trimmed, name: name)
+        pendingScan = parsed
         isShowingConfirmAlert = true
     }
 

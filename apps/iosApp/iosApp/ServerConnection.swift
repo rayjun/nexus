@@ -90,7 +90,13 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
     // MARK: - Connection
 
     func connect() {
-        guard !isConnected, !isPairingInProgress else { return }
+        // !isPairingInProgress used to gate here — that BLOCKED first-time
+        // pairing: startPairing() sets isPairingInProgress=true then calls
+        // connect(), which returned immediately (never connecting, timer
+        // fires "pairing timed out" 25s later). The socket must open during
+        // pairing; reconnection policy already excludes pairing via
+        // onDisconnected's `!isPairingInProgress` check.
+        guard !isConnected else { return }
         shouldReconnect = true
         let epoch = connectionEpoch + 1
         connectionEpoch = epoch
