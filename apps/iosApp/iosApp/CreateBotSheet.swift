@@ -60,6 +60,7 @@ struct CreateBotSheet: View {
                                     }
                                 }
                             }
+                            .accessibilityLabel("Model")
                             .pickerStyle(.menu)
                             .font(.system(size: 15))
                             .foregroundStyle(NexusStyle.text)
@@ -75,6 +76,7 @@ struct CreateBotSheet: View {
                                 Text(s.isOnline ? "● \(s.name)" : "○ \(s.name)").tag(s.id)
                             }
                         }
+                        .accessibilityLabel("Server")
                         .pickerStyle(.menu)
                         .font(.system(size: 15))
                         .foregroundStyle(NexusStyle.text)
@@ -107,6 +109,7 @@ struct CreateBotSheet: View {
                 .padding(.top, 16)
             }
             .background(NexusStyle.background)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("New bot")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

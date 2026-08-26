@@ -59,6 +59,7 @@ struct SettingsView: View {
                 .padding(.bottom, 24)
             }
             .background(NexusStyle.background)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -153,6 +154,8 @@ struct ServersView: View {
                     .background(NexusStyle.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    // NOTE: swipeActions is List-only — no-op inside ScrollView.
+                    // Delete stays reachable via long-press contextMenu below.
                     .contextMenu {
                         Button("Delete server", role: .destructive) {
                             relay.removeServer(serverID: server.id)
@@ -164,8 +167,15 @@ struct ServersView: View {
             .padding(.horizontal, 18)
             .padding(.top, 16)
             .padding(.bottom, 24)
+
+            Text("Deleting a server keeps your bots on the phone as offline; re-pairing restores them.")
+                .font(.system(size: 12))
+                .foregroundStyle(NexusStyle.subtleText)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 16)
         }
         .background(NexusStyle.background)
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Servers")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
