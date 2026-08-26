@@ -10,63 +10,57 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                NavigationLink {
-                    ServersView(store: store)
-                } label: {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Servers").font(.system(size: 15, weight: .medium))
-                            Text("\(relay.servers.filter { $0.isOnline }.count) connected · pair & manage")
-                                .font(.system(size: 12)).foregroundStyle(NexusStyle.muted)
+            ScrollView {
+                VStack(spacing: 12) {
+                    settingsRow {
+                        NavigationLink {
+                            ServersView(store: store)
+                        } label: {
+                            rowContent("server.rack", title: "Servers",
+                                       subtitle: "\(relay.servers.filter { $0.isOnline }.count) connected · pair & manage",
+                                       tint: NexusStyle.blue, chevron: true)
                         }
-                    } icon: {
-                        Image(systemName: "server.rack")
-                            .foregroundStyle(NexusStyle.blue)
+                    }
+                    settingsRow {
+                        Toggle(isOn: $lightTheme) {
+                            rowContent("sun.max.fill", title: "Light theme",
+                                       subtitle: "Day theme is the default", tint: .orange, chevron: false)
+                        }
+                        .tint(NexusStyle.blue)
+                    }
+                    settingsRow {
+                        NavigationLink {
+                            Text("Approval notifications — coming with the approvals pane.")
+                                .font(.system(size: 14)).foregroundStyle(NexusStyle.muted).padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } label: {
+                            rowContent("bell.fill", title: "Notifications",
+                                       subtitle: "Approvals, errors, mentions", tint: NexusStyle.muted, chevron: true)
+                        }
+                    }
+                    settingsRow {
+                        NavigationLink {
+                            Text("E2E keys live in the Keychain (ThisDeviceOnly). No plaintext leaves the device unencrypted.")
+                                .font(.system(size: 14)).foregroundStyle(NexusStyle.muted).padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } label: {
+                            rowContent("lock.fill", title: "Privacy & Security",
+                                       subtitle: "E2E keys in Keychain only", tint: NexusStyle.muted, chevron: true)
+                        }
+                    }
+                    settingsRow {
+                        rowContent("info.circle.fill", title: "About",
+                                   subtitle: "Nexus \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")",
+                                   tint: NexusStyle.muted, chevron: false)
                     }
                 }
-                Toggle(isOn: $lightTheme) {
-                    Label {
-                        Text("Light theme").font(.system(size: 15, weight: .medium))
-                    } icon: {
-                        Image(systemName: "sun.max.fill")
-                            .foregroundStyle(.orange)
-                    }
-                }
-                NavigationLink {
-                    Text("Approval notifications — coming with the approvals pane.")
-                        .font(.system(size: 14)).foregroundStyle(NexusStyle.muted).padding()
-                } label: {
-                    Label {
-                        Text("Notifications").font(.system(size: 15, weight: .medium))
-                    } icon: {
-                        Image(systemName: "bell.fill")
-                            .foregroundStyle(NexusStyle.muted)
-                    }
-                }
-                NavigationLink {
-                    Text("E2E keys live in the Keychain (ThisDeviceOnly). No plaintext leaves the device unencrypted.")
-                        .font(.system(size: 14)).foregroundStyle(NexusStyle.muted).padding()
-                } label: {
-                    Label {
-                        Text("Privacy & Security").font(.system(size: 15, weight: .medium))
-                    } icon: {
-                        Image(systemName: "lock.fill")
-                            .foregroundStyle(NexusStyle.muted)
-                    }
-                }
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("About").font(.system(size: 15, weight: .medium))
-                        Text("Nexus \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
-                            .font(.system(size: 12)).foregroundStyle(NexusStyle.muted)
-                    }
-                } icon: {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundStyle(NexusStyle.muted)
-                }
+                .padding(.horizontal, 18)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
             }
+            .background(NexusStyle.background)
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { dismiss() } label: {
@@ -78,6 +72,39 @@ struct SettingsView: View {
             }
         }
     }
+
+    private func settingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .background(NexusStyle.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+    }
+
+    private func rowContent(_ icon: String, title: String, subtitle: String,
+                            tint: Color, chevron: Bool) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(NexusStyle.text)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(NexusStyle.muted)
+            }
+            Spacer(minLength: 0)
+            if chevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(NexusStyle.subtleText)
+            }
+        }
+        .contentShape(Rectangle())
+    }
 }
 
 /// Servers management — list, re-pair, and pair via top-right `+`.
@@ -88,8 +115,8 @@ struct ServersView: View {
     @State private var toast: ToastMessage?
 
     var body: some View {
-        List {
-            Section {
+        ScrollView {
+            VStack(spacing: 10) {
                 ForEach(relay.servers) { server in
                     HStack(spacing: 12) {
                         Circle()
@@ -121,21 +148,26 @@ struct ServersView: View {
                                 .foregroundStyle(NexusStyle.green)
                         }
                     }
-                }
-                .onDelete { indexSet in
-                    for idx in indexSet {
-                        let sid = relay.servers[idx].id
-                        relay.removeServer(serverID: sid)
-                        store.pruneServer(sid)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 13)
+                    .background(NexusStyle.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .contextMenu {
+                        Button("Delete server", role: .destructive) {
+                            relay.removeServer(serverID: server.id)
+                            store.pruneServer(server.id)
+                        }
                     }
                 }
-            } header: {
-                Text("Servers")
-            } footer: {
-                Text("Deleting a server keeps your bots on the phone as offline; re-pairing restores them.")
             }
+            .padding(.horizontal, 18)
+            .padding(.top, 16)
+            .padding(.bottom, 24)
         }
+        .background(NexusStyle.background)
         .navigationTitle("Servers")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -187,29 +219,53 @@ struct BotManageSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Bot") {
-                    LabeledContent("Profile", value: bot.name)
-                    LabeledContent("Server", value: bot.serverID)
-                    TextField("Display name", text: $displayName)
-                    LabeledContent("Model", value: bot.model.isEmpty ? "server default" : bot.model)
-                }
-                Section("Session") {
-                    LabeledContent("Thread", value: bot.preferredSessionID ?? "none yet")
-                    LabeledContent("Last active", value: bot.lastActiveAt.map {
-                        $0.formatted(date: .abbreviated, time: .shortened)
-                    } ?? "—")
-                }
-                if !errorText.isEmpty {
-                    Section { Text(errorText).foregroundStyle(.red).font(.footnote) }
-                }
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    card {
+                        VStack(alignment: .leading, spacing: 12) {
+                            infoRow("Profile", bot.name)
+                            infoRow("Server", bot.serverID)
+                            fieldLabel("Display name")
+                            TextField(bot.name, text: $displayName)
+                                .fieldInput()
+                            infoRow("Model", bot.model.isEmpty ? "server default" : bot.model)
+                        }
+                    }
+
+                    card {
+                        VStack(alignment: .leading, spacing: 12) {
+                            infoRow("Thread", bot.preferredSessionID ?? "none yet")
+                            infoRow("Last active", bot.lastActiveAt.map {
+                                $0.formatted(date: .abbreviated, time: .shortened)
+                            } ?? "—")
+                        }
+                    }
+
+                    if !errorText.isEmpty {
+                        Text(errorText).font(.system(size: 13)).foregroundStyle(.red)
+                            .padding(.horizontal, 4)
+                    }
+
                     Button("Delete from list", role: .destructive) { confirmDelete = true }
-                } footer: {
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(Color.red.opacity(0.10),
+                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.red.opacity(0.25), lineWidth: 1))
+
                     Text("This hides the bot on this phone. The Hermes profile stays on the server.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(NexusStyle.subtleText)
+                        .padding(.horizontal, 4)
+                        .padding(.bottom, 20)
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, 16)
             }
+            .background(NexusStyle.background)
             .navigationTitle(bot.displayTitle)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -226,6 +282,34 @@ struct BotManageSheet: View {
             }
         }
         .onAppear { displayName = bot.displayName }
+    }
+
+    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(NexusStyle.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
+    }
+
+    private func infoRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(NexusStyle.muted)
+                .frame(width: 86, alignment: .leading)
+            Text(value)
+                .font(.system(size: 14))
+                .foregroundStyle(NexusStyle.text)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(NexusStyle.muted)
     }
 
     private func rename() async {

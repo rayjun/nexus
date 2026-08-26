@@ -114,4 +114,14 @@ extension View {
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
             .shadow(color: Color.black.opacity(0.035), radius: 16, x: 0, y: 8)
     }
+
+    /// Input field shaped for the flat card style (home/Add-bot/settings).
+    func fieldInput() -> some View {
+        font(.system(size: 15))
+            .foregroundStyle(NexusStyle.text)
+            .autocorrectionDisabled()
+            .padding(12)
+            .background(NexusStyle.row, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(NexusStyle.line, lineWidth: 1))
+    }
 }
