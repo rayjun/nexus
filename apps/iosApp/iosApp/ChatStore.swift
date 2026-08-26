@@ -31,6 +31,13 @@ final class ChatStore: ObservableObject {
         bots = BotStore.loadRoster()
         chats = BotStore.loadChats()
         preferredSessions = BotStore.loadPreferred()
+        // Prune cached bots whose server no longer exists (e.g. a duplicate
+        // server entry was dropped at RelayClient startup dedupe) — they can
+        // never come back online.
+        let liveIDs = Set(relay.servers.map(\.id))
+        if bots.contains(where: { !liveIDs.contains($0.serverID) }) {
+            bots = bots.filter { liveIDs.contains($0.serverID) }
+        }
     }
 
     // MARK: Roster

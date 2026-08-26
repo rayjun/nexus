@@ -91,5 +91,26 @@ expect(!validSlug(""), "slug: empty rejected")
 expect(!validSlug("a b c"), "slug: space rejected")
 expect(!validSlug(String(repeating: "a", count: 65)), "slug: 65 chars rejected")
 
+// ── session.history contract (ChatView loadHistory) ──
+// Hermes returns {"count": N, "messages": [{role, text, timestamp?}]} —
+// the client's "items" key / "id" pre-requisite never matched this shape,
+// which silently emptied every chat thread (fixed).
+func historyMessages(_ resp: [String: Any]) -> [[String: Any]] {
+    (resp["messages"] as? [[String: Any]]) ?? []
+}
+let hist: [String: Any] = [
+    "count": 2,
+    "messages": [
+        ["role": "user", "text": "hi", "timestamp": 1_723_000_000.0],
+        ["role": "assistant", "text": "hello!"],
+        ["role": "tool", "name": "web_search", "text": "ok"],
+    ],
+]
+let msgs = historyMessages(hist)
+expect(msgs.count == 3, "session.history: messages key carries rows")
+expect(msgs.first?["role"] as? String == "user", "history row: role field")
+expect(msgs.first?["text"] as? String == "hi", "history row: text field")
+expect(msgs[2]["name"] as? String == "web_search", "history row: tool name")
+
 print(failures == 0 ? "\nALL OK (14 tests)" : "\n\(failures) FAILURES")
 exit(failures == 0 ? 0 : 1)

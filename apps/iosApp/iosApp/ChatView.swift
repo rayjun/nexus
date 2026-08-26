@@ -331,7 +331,9 @@ struct ChatView: View {
                 method: "session.history",
                 params: ["session_id": sid]
             )
-            if let dict = res as? [String: Any], let items = dict["items"] as? [[String: Any]] {
+            // Hermes returns {"count": N, "messages": [{role, text, timestamp?}]}
+            // — NOT "items"; that key never existed (silent empty history).
+            if let dict = res as? [String: Any], let items = dict["messages"] as? [[String: Any]] {
                 let decoded = decodeTimeline(items)
                 store.setMessages(decoded, for: resolvedBot.id)
             }
@@ -430,19 +432,31 @@ struct ChatView: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NexusStyle.border, lineWidth: 1))
     }
 
+    /// Decode session.history messages: {role: user|assistant|tool, text,
+    /// timestamp?: unix-sec}. id is synthesized (row_id when present, else
+    /// index-stable) since history rows carry no client-facing id.
     private func decodeTimeline(_ items: [[String: Any]]) -> [TimelineItem] {
-        items.compactMap { d in
-            guard let id = d["id"] as? String else { return nil }
+        items.enumerated().compactMap { idx, d in
+            let role = (d["role"] as? String) ?? "assistant"
+            let text = (d["text"] as? String) ?? ""
+            guard !text.isEmpty else { return nil }
+            let ts = d["timestamp"] as? Double ?? 0
             return TimelineItem(
-                id: id,
-                type: (d["type"] as? String) ?? "assistant",
-                text: d["text"] as? String,
-                markdown: d["markdown"] as? String,
-                title: d["title"] as? String,
-                timestamp: (d["timestamp"] as? String) ?? "",
-                toolName: d["tool_name"] as? String,
-                toolCalls: d["tool_calls"] as? String
+                id: (d["row_id"] as? String) ?? "h\(idx)",
+                type: role == "user" ? "user" : (role == "tool" ? "tool" : "assistant"),
+                text: text,
+                markdown: nil,
+                title: (d["name"] as? String) ?? (role == "tool" ? "tool" : nil),
+                timestamp: ts > 0 ? Self.hhmm(ts) : "",
+                toolName: role == "tool" ? (d["name"] as? String) : nil,
+                toolCalls: nil
             )
         }
+    }
+
+    private static func hhmm(_ unix: Double) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f.string(from: Date(timeIntervalSince1970: unix))
     }
 }

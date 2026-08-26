@@ -279,7 +279,16 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
         case "pong":
             break
         case "error":
-            log("relay error: %@", msg["message"] as? String ?? "?")
+            let message = msg["message"] as? String ?? "?"
+            log("relay error: %@ (state: connected=%@ pairing=%@)", message,
+                String(isConnected), String(isPairingInProgress))
+            // A rejected join (duplicate app connection / channel gone) means
+            // this socket is USELESS — RPCs would silently hang. Surface it
+            // instead of pretending to be online.
+            if isConnected {
+                isConnected = false
+                onStatusChange?()
+            }
         default:
             break
         }

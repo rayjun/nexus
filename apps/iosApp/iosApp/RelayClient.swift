@@ -26,7 +26,21 @@ final class RelayClient: NSObject, ObservableObject {
 
     override init() {
         super.init()
-        servers = ServerStore.load()
+        // Dedupe by channel up-front: pre-fix builds could persist multiple
+        // entries for the same relay channel (the relay rejects the second
+        // app join, leaving a hang-forever ghost). Keep the first, drop the
+        // rest — their Keychain keys are already orphaned.
+        var seen = Set<String>()
+        let loaded = ServerStore.load()
+        servers = loaded.filter { seen.insert($0.channelID).inserted }
+        if servers.count != loaded.count {
+            os_log("dropped %d duplicate server entries (loaded %d, kept %d)",
+                   log: relayLog, type: .info, loaded.count - servers.count,
+                   loaded.count, servers.count)
+            ServerStore.save(servers)
+        }
+        os_log("init: %d servers — %@", log: relayLog, type: .info,
+               servers.count, servers.map { "\($0.name)/\($0.channelID.prefix(8))" }.joined(separator: ", "))
         if servers.isEmpty {
             // Migrate the legacy single-pairing state (pre-multi-server builds)
             if let migrated = ServerStore.migrateLegacyIfNeeded() {
@@ -45,8 +59,25 @@ final class RelayClient: NSObject, ObservableObject {
     // MARK: - Server management
 
     /// Pair with a new server (relay URL + pairing code) — this ADDS a server.
+    /// Idempotent per channel: pairing the same code again reuses the existing
+    /// server entry instead of creating a second connection to the same relay
+    /// channel (the relay allows ONE app per channel — a duplicate would be
+    /// rejected at join and its RPCs would hang forever).
     func addServer(relayURL: String, name: String? = nil, code: String) -> String {
         let channelID = E2ECrypto.channelIdFromPairingCode(code)
+        if let existing = servers.first(where: { $0.channelID == channelID }) {
+            // Re-pair of an existing server: refresh URL/name, keep id so the
+            // Keychain-stored E2E keys (keyed by server id) stay valid.
+            if let idx = servers.firstIndex(where: { $0.id == existing.id }) {
+                servers[idx].relayURL = relayURL
+                if let name, !name.isEmpty { servers[idx].name = name }
+            }
+            ServerStore.save(servers)
+            activeServerID = existing.id
+            connections[existing.id]?.disconnect()
+            connect(serverID: existing.id)
+            return existing.id
+        }
         let server = ServerProfile(
             id: UUID().uuidString,
             name: name ?? channelID,

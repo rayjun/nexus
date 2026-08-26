@@ -18,12 +18,16 @@ struct NexusApp: App {
         // E2E/deep-link bootstrap: an external payload pre-seeded in
         // UserDefaults (e.g. `simctl spawn booted defaults write …`) starts
         // the pairing flow automatically. Consumed once, then cleared.
-        if let payload = UserDefaults.standard.string(forKey: "pending_pairing_payload"),
+        // Only honored when NO server is paired yet — a lingering payload
+        // (e.g. the write not flushed across app reinstall) must not cause
+        // repeated re-pairing on every launch.
+        if relay.servers.isEmpty,
+           let payload = UserDefaults.standard.string(forKey: "pending_pairing_payload"),
            !payload.isEmpty {
             _pendingPairingPayload = State(initialValue: payload)
             _isShowingPairing = State(initialValue: true)
-            UserDefaults.standard.removeObject(forKey: "pending_pairing_payload")
         }
+        UserDefaults.standard.removeObject(forKey: "pending_pairing_payload")
     }
 
     var body: some Scene {
