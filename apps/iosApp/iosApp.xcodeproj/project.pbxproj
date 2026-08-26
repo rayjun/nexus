@@ -28,6 +28,7 @@ A20000000000000000000006 /* PairingView.swift in Sources */ = {isa = PBXBuildFil
 		D00000000000000000000005 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000110000005 /* ChatView.swift */; };
 		D00000000000000000000008 /* EmojiPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000110000008 /* EmojiPanel.swift */; };
 		D00000000000000000000009 /* ChatPanels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000110000009 /* ChatPanels.swift */; };
+		D0000000000000000000000A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000011000000A /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +55,7 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 		D00000000000000110000005 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		D00000000000000110000008 /* EmojiPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPanel.swift; sourceTree = "<group>"; };
 		D00000000000000110000009 /* ChatPanels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPanels.swift; sourceTree = "<group>"; };
+		D0000000000000011000000A /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +94,7 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 				D00000000000000110000003 /* ChatStore.swift */,
 				D00000000000000110000007 /* SettingsView.swift */,
 				D00000000000000110000009 /* ChatPanels.swift */,
+				D0000000000000011000000A /* AppDelegate.swift */,
 				D00000000000000110000008 /* EmojiPanel.swift */,
 				D00000000000000110000006 /* CreateBotSheet.swift */,
 				D00000000000000110000004 /* ChatListView.swift */,
@@ -186,6 +189,7 @@ A20000000000000000000005 /* PairingView.swift */ = {isa = PBXFileReference; last
 				D00000000000000000000003 /* ChatStore.swift in Sources */,
 				D00000000000000000000007 /* SettingsView.swift in Sources */,
 				D00000000000000000000009 /* ChatPanels.swift in Sources */,
+				D0000000000000000000000A /* AppDelegate.swift in Sources */,
 				D00000000000000000000008 /* EmojiPanel.swift in Sources */,
 				D00000000000000000000006 /* CreateBotSheet.swift in Sources */,
 				D00000000000000000000004 /* ChatListView.swift in Sources */,
