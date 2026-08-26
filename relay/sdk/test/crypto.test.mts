@@ -35,6 +35,12 @@ const V = {
 
 test("channel id from pairing code", () => {
   assert.equal(channelIdFromPairingCode(V.code), V.channel);
+  // 16-char codes (current pairing rule) derive the same way — the crypto
+  // layer is length-agnostic (SHA-256 over the code); the length rule lives
+  // in the protocol/UI validation layers.
+  const sixteen = channelIdFromPairingCode("K7M2P9QX3F5B8TZ2");
+  assert.equal(sixteen.length, 16);
+  assert.match(sixteen, /^[0-9a-f]{16}$/);
 });
 
 test("X25519 public derivation", async () => {

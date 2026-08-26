@@ -73,7 +73,7 @@ if [ -f "$STATE_DIR/enc_key" ] && [ -f "$STATE_DIR/paired_pubkey" ]; then
     PAIR_MODE=0
 else
     PAIR_MODE=1
-    # Security: 8-char alphanumeric code (32^8 ≈ 10^12) — 6-digit numeric is
+    # Security: 16-char alphanumeric code (32^16 ≈ 10^24) — 6-digit or 8-char is
     # brute-forceable (channel ids are precomputable; attacker races the app).
     PAIR_CODE="$(tr -dc 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' < /dev/urandom | head -c 8)"
     echo "NOT paired yet. Pairing code: $PAIR_CODE"

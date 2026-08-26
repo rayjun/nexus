@@ -15,7 +15,7 @@ import {
 } from "../src/crypto.ts";
 
 const RELAY_URL = process.env.RELAY_URL ?? "ws://127.0.0.1:9120/relay";
-const CODE = process.env.PAIR_CODE ?? "E2EPASS8";
+const CODE = process.env.PAIR_CODE ?? "E2EPASS8-FRESH-16CH";
 const channel = channelIdFromPairingCode(CODE);
 
 const log = (...a: unknown[]) =>

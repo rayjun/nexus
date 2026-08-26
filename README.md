@@ -5,7 +5,7 @@ A native iOS app for managing AI agents powered by [Hermes Agent](https://github
 ## Features
 
 - **E2E-Encrypted Relay** — X25519 key agreement + ChaCha20-Poly1305 AEAD over a lightweight public relay. The relay only sees ciphertext and a channel ID; it never sees message content.
-- **QR or Code Pairing** — Scan the agent's terminal QR with the phone camera, or type an 8-character code; E2E keys persist for automatic reconnect.
+- **QR or Code Pairing** — Scan the agent's terminal QR with the phone camera, or type a 16-character code; E2E keys persist for automatic reconnect.
 - **Session Management** — Browse and resume Hermes sessions with a full timeline view.
 - **Agent Chat** — Send prompts to Hermes agents, approve/deny tool approvals, interrupt running sessions.
 - **Cron & Automation** — View and manage Hermes cron jobs from your phone.
@@ -65,7 +65,7 @@ export PATH="$HOME/.local/bin:$PATH"
 **3. Configure + pair**:
 
 ```bash
-nexus-agent setup --relay wss://<your-relay-domain>/relay --code K7M2P9QX
+nexus-agent setup --relay wss://<your-relay-domain>/relay --code K7M2P9QX3F5B8TZ2
 nexus-agent pair        # shows a QR + code, waits for the app
 ```
 

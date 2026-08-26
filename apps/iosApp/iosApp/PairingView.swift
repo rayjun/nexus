@@ -64,7 +64,7 @@ struct PairingView: View {
                     Text("Pairing code (from the agent)")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
-                    TextField("K7M2P9QX", text: $code)
+                    TextField("K7M2P9QX3F5B8TZ2", text: $code)
                         .font(.system(size: 20, weight: .semibold, design: .monospaced))
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
@@ -232,10 +232,11 @@ struct PairingView: View {
             return nil
         }
         let trimmed = codeValue.uppercased()
-        guard trimmed.count >= 8, trimmed.count <= 12,
-              trimmed.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
+        // 16-char alphanumeric, optionally grouped as 4-4-4-4 (hyphens).
+        let plain = trimmed.replacingOccurrences(of: "-", with: "")
+        guard plain.count == 16, plain.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
             isError = true
-            errorMessage = "Pairing code in QR is invalid"
+            errorMessage = "Pairing code in QR is invalid (16 alphanumeric chars)"
             return nil
         }
         let name = String((comps.queryItems?.first(where: { $0.name == "name" })?.value ?? "").prefix(64))
@@ -266,9 +267,10 @@ struct PairingView: View {
 
     private var canAdd: Bool {
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Align with startPairing's real rule: 8-12 alphanumeric.
-        return !relayUrl.isEmpty && trimmedCode.count >= 8 && trimmedCode.count <= 12
-            && trimmedCode.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil
+        // Align with startPairing's real rule: 16 alphanumeric (hyphens ok).
+        let plain = trimmedCode.replacingOccurrences(of: "-", with: "")
+        return !relayUrl.isEmpty && plain.count == 16
+            && plain.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil
     }
 
     /// QR payload: nexus://<relay>?code=<CODE>&name=<name>
@@ -276,7 +278,7 @@ struct PairingView: View {
     private var pairingQR: UIImage? {
         let trimmedRelay = relayUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedRelay.isEmpty, trimmedCode.count >= 8 else { return nil }
+        guard !trimmedRelay.isEmpty, trimmedCode.replacingOccurrences(of: "-", with: "").count == 16 else { return nil }
         let name = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
         // Normalize so the QR is nexus://<host/path> — strip any scheme the
         // relay field already carries (the agent re-adds wss://).
@@ -347,10 +349,11 @@ struct PairingView: View {
             errorMessage = "Relay must use wss:// (TLS)"
             return
         }
-        guard trimmedCode.count >= 8, trimmedCode.count <= 12,
-              trimmedCode.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
+        let plain = trimmedCode.replacingOccurrences(of: "-", with: "")
+        guard plain.count == 16,
+              plain.rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil else {
             isError = true
-            errorMessage = "Enter the 8-character pairing code from the agent"
+            errorMessage = "Enter the 16-character pairing code from the agent"
             return
         }
         isAdding = true

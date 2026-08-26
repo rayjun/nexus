@@ -505,7 +505,7 @@ def main():
     default_dash = os.environ.get("HERMES_DASHBOARD_WS", "")
     parser.add_argument("--dashboard", default=default_dash, help="Hermes Dashboard WS URL (or set HERMES_DASHBOARD_WS)")
     parser.add_argument("--pair", action="store_true", help="Generate pairing code")
-    parser.add_argument("--code", default=None, help="Use specific pairing code (8-char alphanumeric, e.g. K7mP2xQ9)")
+    parser.add_argument("--code", default=None, help="Use specific pairing code (16-char alphanumeric, e.g. K7M2P9QX-3F5B-8TZ2)")
     parser.add_argument("--daemon", action="store_true", help="Detach into the background (nexus-agent internal)")
     parser.add_argument("--log-file", default=None, help="Write logs to this file (nexus-agent internal)")
     parser.add_argument("--pidfile", default=None, help="Write our pid here after daemonizing (nexus-agent internal)")
@@ -520,17 +520,21 @@ def main():
     client = MobileRelayClient(args.relay, args.dashboard)
 
     if args.pair:
-        # Security: 8-char alphanumeric code (32^8 ≈ 10^12 space) — a 6-digit
-        # numeric code (10^6) is brute-forceable: an attacker can precompute
-        # channel ids and race the real app to join the channel (MITM).
+        # Security: 16-char alphanumeric code (32^16 ≈ 10^24 space) — a
+        # 6-digit numeric code (10^6) or even 8-char (10^12) is
+        # brute-forceable: an attacker can precompute channel ids and race
+        # the real app to join the channel (MITM). 16 chars keeps even
+        # offline-channel-squatting attacks infeasible.
         if args.code:
             code = args.code.strip().upper()
-            if not (8 <= len(code) <= 12) or not code.replace("-", "").isalnum():
-                log.error("pairing code must be 8-12 alphanumeric chars (e.g. K7M2P9QX)")
+            plain = code.replace("-", "")
+            # Accept 16 chars, optionally grouped as 4-4-4-4 (17 with hyphens).
+            if not (len(plain) == 16 and plain.isalnum()) or not code.replace("-", "").isalnum():
+                log.error("pairing code must be 16 alphanumeric chars (e.g. K7M2P9QX3F5B8TZ2 or K7M2-P9QX-3F5B-8TZ2)")
                 return
         else:
             alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I/O/1/0 ambiguity
-            code = "".join(secrets.choice(alphabet) for _ in range(8))
+            code = "".join(secrets.choice(alphabet) for _ in range(16))
         print(f"\n  Pairing code: {code}\n  Enter this in Nexus app (Add Server).\n")
         asyncio.run(client.pair_and_run(code))
     else:

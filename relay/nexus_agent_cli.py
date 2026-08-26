@@ -119,9 +119,10 @@ def cmd_setup(args) -> int:
         cfg["relay"] = val
     if "code" not in cfg or args.force or args.code:
         cur = cfg.get("code", "")
-        val = (args.code or "").strip().upper() or input(f"Pairing code (8+ chars, e.g. K7M2P9QX) [{cur}]: ").strip().upper() or cur
-        if not (8 <= len(val) <= 12) or not val.replace("-", "").isalnum():
-            log("ERROR: pairing code must be 8-12 alphanumeric chars")
+        val = (args.code or "").strip().upper() or input(f"Pairing code (16 chars, e.g. K7M2P9QX3F5B8TZ2) [{cur}]: ").strip().upper() or cur
+        plain = val.replace("-", "")
+        if len(plain) != 16 or not plain.isalnum():
+            log("ERROR: pairing code must be 16 alphanumeric chars (e.g. K7M2P9QX3F5B8TZ2 or K7M2-P9QX-3F5B-8TZ2)")
             return 1
         cfg["code"] = val
     if "dashboard" not in cfg or args.force or args.dashboard is not None:
@@ -464,8 +465,8 @@ def _parse_qr_payload(payload: str) -> tuple[str, str, str] | None:
         if not codes:
             return None
         code = codes[0].upper()
-        # Same rule as cmd_setup/relay_agent: 8-12 alphanumeric (dashes ok)
-        if not (8 <= len(code) <= 12) or not code.replace("-", "").isalnum():
+        # Same rule as cmd_setup/relay_agent: 16 alphanumeric (dashes ok)
+        if len(code.replace("-", "")) != 16 or not code.replace("-", "").isalnum():
             return None
         # Reject userinfo: a crafted 'nexus://user:pass@evil.com' must not
         # put credentials into the relay URL (or the log line that echoes it).
