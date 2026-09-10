@@ -146,7 +146,7 @@ struct ServersView: View {
                             .foregroundStyle(NexusStyle.blue)
                         } else {
                             Text("Online").font(.system(size: 12))
-                                .foregroundStyle(NexusStyle.green)
+                                .foregroundStyle(NexusStyle.muted)
                         }
                     }
                     .padding(.horizontal, 14)

@@ -124,7 +124,11 @@ struct ChatView: View {
                     .lineLimit(1)
                 Text(resolvedBot.status == .offline ? "Offline" : "Online")
                     .font(.system(size: 11))
-                    .foregroundStyle(resolvedBot.status == .offline ? NexusStyle.muted : NexusStyle.green)
+                    // Status labels are words: always the secondary tier.
+                    // Only the status DOT carries hue (green/subtleText are
+                    // non-text colours and fail 4.5:1 as text: green was
+                    // 3.88:1 on the light background).
+                    .foregroundStyle(NexusStyle.muted)
             }
             Spacer()
             if isSending {
