@@ -214,7 +214,7 @@ struct ChatListView: View {
                         if let t = bot.lastActiveAt {
                             Text(timeString(t))
                                 .font(.system(size: 11))
-                                .foregroundStyle(NexusStyle.subtleText)
+                                .foregroundStyle(NexusStyle.muted)
                         }
                     }
                     HStack(spacing: 5) {
@@ -222,7 +222,7 @@ struct ChatListView: View {
                             .frame(width: 7, height: 7)
                         Text(bot.lastPreview ?? (bot.status == .offline ? "Offline — re-pair in Settings" : "Start chatting"))
                             .font(.system(size: 13))
-                            .foregroundStyle(bot.status == .offline ? NexusStyle.muted : NexusStyle.muted)
+                            .foregroundStyle(NexusStyle.muted)
                             .lineLimit(1)
                     }
                 }
@@ -248,12 +248,15 @@ struct ChatListView: View {
         let names = ["blue", "purple", "green", "orange", "pink", "indigo"]
         let v = bot.name.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
         switch names[v % names.count] {
-        case "purple": return Color(red: 0.55, green: 0.36, blue: 0.98)
-        case "green": return Color(red: 0.13, green: 0.78, blue: 0.45)
-        case "orange": return Color(red: 0.96, green: 0.62, blue: 0.12)
-        case "pink": return Color(red: 0.9, green: 0.35, blue: 0.6)
-        case "indigo": return Color(red: 0.35, green: 0.45, blue: 0.95)
-        default: return NexusStyle.blue
+        // Fixed hues, deliberately NOT theme-dependent (an avatar must not
+        // change identity between light and dark) and all >=5:1 against the
+        // white initial: 5.73 / 6.69 / 5.34 / 5.02 / 6.04 / 7.90.
+        case "purple": return Color(red: 0.3608, green: 0.2471, blue: 0.8392)
+        case "green": return Color(red: 0.0627, green: 0.4784, blue: 0.3294)
+        case "orange": return Color(red: 0.7059, green: 0.3255, blue: 0.0353)
+        case "pink": return Color(red: 0.7451, green: 0.0941, blue: 0.3647)
+        case "indigo": return Color(red: 0.2627, green: 0.2196, blue: 0.7922)
+        default: return Color(red: 0.0314, green: 0.3451, blue: 0.9412)
         }
     }
 
@@ -283,7 +286,7 @@ struct ChatListView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 20).frame(height: 44)
-                .background(NexusStyle.blue, in: Capsule())
+                .background(NexusStyle.accentFill, in: Capsule())
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -309,7 +312,7 @@ struct ChatListView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 20).frame(height: 44)
-                .background(NexusStyle.blue, in: Capsule())
+                .background(NexusStyle.accentFill, in: Capsule())
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

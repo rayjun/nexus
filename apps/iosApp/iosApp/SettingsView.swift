@@ -170,7 +170,7 @@ struct ServersView: View {
 
             Text("Deleting a server keeps your bots on the phone as offline; re-pairing restores them.")
                 .font(.system(size: 12))
-                .foregroundStyle(NexusStyle.subtleText)
+                .foregroundStyle(NexusStyle.muted)
                 .padding(.horizontal, 18)
                 .padding(.bottom, 16)
         }
@@ -252,7 +252,7 @@ struct BotManageSheet: View {
                     }
 
                     if !errorText.isEmpty {
-                        Text(errorText).font(.system(size: 13)).foregroundStyle(.red)
+                        Text(errorText).font(.system(size: 13)).foregroundStyle(NexusStyle.danger)
                             .padding(.horizontal, 4)
                     }
 
@@ -260,13 +260,13 @@ struct BotManageSheet: View {
                         .font(.system(size: 15, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 13)
-                        .background(Color.red.opacity(0.10),
+                        .background(NexusStyle.danger.opacity(0.10),
                                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.red.opacity(0.25), lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NexusStyle.danger.opacity(0.25), lineWidth: 1))
 
                     Text("This hides the bot on this phone. The Hermes profile stays on the server.")
                         .font(.system(size: 12))
-                        .foregroundStyle(NexusStyle.subtleText)
+                        .foregroundStyle(NexusStyle.muted)
                         .padding(.horizontal, 4)
                         .padding(.bottom, 20)
                 }

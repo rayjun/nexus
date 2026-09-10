@@ -95,13 +95,13 @@ struct CreateBotSheet: View {
                     if !errorText.isEmpty {
                         Text(errorText)
                             .font(.system(size: 13))
-                            .foregroundStyle(.red)
+                            .foregroundStyle(NexusStyle.danger)
                             .padding(.horizontal, 4)
                     }
 
                     Text("Each bot is a Hermes profile with its own model, memory and settings.")
                         .font(.system(size: 12))
-                        .foregroundStyle(NexusStyle.subtleText)
+                        .foregroundStyle(NexusStyle.muted)
                         .padding(.horizontal, 4)
                         .padding(.bottom, 20)
                 }
@@ -136,7 +136,7 @@ struct CreateBotSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(NexusStyle.subtleText)
+                .foregroundStyle(NexusStyle.muted)
                 .padding(.horizontal, 4)
             content()
                 .padding(14)

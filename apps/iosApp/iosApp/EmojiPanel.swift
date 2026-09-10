@@ -42,7 +42,7 @@ struct EmojiPanel: View {
                             .font(.system(size: 12.5, weight: .semibold))
                             .foregroundStyle(tab == t ? .white : NexusStyle.muted)
                             .padding(.horizontal, 14).padding(.vertical, 6)
-                            .background(tab == t ? NexusStyle.blue : NexusStyle.row,
+                            .background(tab == t ? NexusStyle.accentFill : NexusStyle.row,
                                         in: Capsule())
                     }
                     .buttonStyle(.plain)

@@ -57,7 +57,7 @@ struct ChatView: View {
             }
             if !errorText.isEmpty {
                 Text(errorText)
-                    .font(.system(size: 12)).foregroundStyle(.red)
+                    .font(.system(size: 12)).foregroundStyle(NexusStyle.danger)
                     .padding(.horizontal, 16).padding(.vertical, 6)
             }
             inputBar
@@ -112,7 +112,7 @@ struct ChatView: View {
                     .foregroundStyle(NexusStyle.blue)
             }
             ZStack {
-                Circle().fill(NexusStyle.blue).frame(width: 34, height: 34)
+                Circle().fill(NexusStyle.accentFill).frame(width: 34, height: 34)
                 Text(String(resolvedBot.displayTitle.prefix(1)).uppercased())
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
@@ -124,7 +124,7 @@ struct ChatView: View {
                     .lineLimit(1)
                 Text(resolvedBot.status == .offline ? "Offline" : "Online")
                     .font(.system(size: 11))
-                    .foregroundStyle(resolvedBot.status == .offline ? NexusStyle.subtleText : NexusStyle.green)
+                    .foregroundStyle(resolvedBot.status == .offline ? NexusStyle.muted : NexusStyle.green)
             }
             Spacer()
             if isSending {
@@ -133,7 +133,7 @@ struct ChatView: View {
                 } label: {
                     Text("Stop")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(NexusStyle.danger)
                 }
             }
             Button { dismiss() } label: {
@@ -404,7 +404,7 @@ struct ChatView: View {
                     .foregroundStyle(NexusStyle.muted)
                 Text(item.timestamp)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(NexusStyle.subtleText)
+                    .foregroundStyle(NexusStyle.muted)
                 if let tool = item.toolName, !tool.isEmpty {
                     Text(tool)
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
