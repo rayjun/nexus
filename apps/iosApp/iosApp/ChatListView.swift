@@ -50,7 +50,19 @@ struct ChatListView: View {
             if connected { Task { await store.refreshRoster() } }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RelayPaired"))) { _ in
+            // Refresh on every pairing event, and once more just past the key
+            // handshake. The second call is the PROBE that makes the
+            // unrecoverable case visible: a peer whose keys cannot converge
+            // (agent re-paired with a new code while we still hold the old
+            // PSK-less keys) swallows every frame, so two RPCs time out in a
+            // row and ServerConnection.noteRPCTimeout() can mark the server as
+            // needing a re-pair instead of hanging on 30s timeouts forever.
+            // A healthy session answers the first call, resetting the counter.
             Task { await store.refreshRoster() }
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                await store.refreshRoster()
+            }
         }
         .fullScreenCover(item: $selectedBot) { bot in
             ChatView(bot: bot, store: store)

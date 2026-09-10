@@ -34,6 +34,14 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
     private var keyPairPub = Data()
     /// Pairing code used as PSK during first-time key exchange (nil after).
     private var pairingPSK: Data?
+    /// Key-agreement watchdog (A): the peer presented a fresh plaintext public
+    /// key this session, so a mismatch is possible — see noteRPCTimeout().
+    private var sawPeerPublicKey = false
+    private var consecutiveTimeouts = 0
+    /// True once we concluded the E2E keys cannot converge (agent re-paired
+    /// with a new code while we still hold the old PSK-less keys). The roster
+    /// then shows the server offline so the Re-pair affordance is obvious.
+    private(set) var needsRepair = false
 
     private var pending: [Int: CheckedContinuation<Any, Error>] = [:]
     private let lock = NSLock()
@@ -265,6 +273,7 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
             let payload = msg["payload"] as? String ?? ""
             if encKey.isEmpty && isPairingInProgress {
                 // pairing: this data is the agent's public key (plaintext)
+                sawPeerPublicKey = true
                 sendPublicKey()
                 handleAgentPublicKey(payload)
             } else if !encKey.isEmpty, isPlaintextPublicKey(payload) {
@@ -272,6 +281,7 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
                 // key. Respond with our own fresh key and re-derive session
                 // keys so a new connection never reuses the old key+nonce
                 // space (ChaCha20 keystream reuse protection).
+                sawPeerPublicKey = true
                 handleRekey(payload)
             } else if !encKey.isEmpty {
                 handleEncryptedData(payload)
@@ -285,7 +295,14 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
             // A rejected join (duplicate app connection / channel gone) means
             // this socket is USELESS — RPCs would silently hang. Surface it
             // instead of pretending to be online.
-            if isConnected {
+            // "peer not connected" is TRANSIENT, not a rejected join: the
+            // relay reports it for every frame sent while the other endpoint
+            // is mid-reconnect (agent restart, app relaunch). Flipping offline
+            // here was permanent — nothing sets it back — so the post-handshake
+            // roster refresh skipped the server and the app sat on "No bots
+            // yet" until a manual pull-to-refresh.
+            let transientPeerAbsent = message.lowercased().contains("peer not connected")
+            if isConnected && !transientPeerAbsent {
                 isConnected = false
                 onStatusChange?()
             }
@@ -354,6 +371,7 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
         } else if let id = id as? Int {
             lock.lock()
             let cont = pending.removeValue(forKey: id)
+            consecutiveTimeouts = 0
             lock.unlock()
             let result = rpc["result"] ?? [:]
             // The relay agent returns {"error": "..."} INSIDE result for
@@ -419,6 +437,7 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
                 self.lock.unlock()
                 c?.resume(throwing: NSError(domain: "Nexus", code: 2,
                                             userInfo: [NSLocalizedDescriptionKey: "rpc timeout"]))
+                self.noteRPCTimeout()
             }
         }
     }
@@ -456,6 +475,31 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
                 self.log("receive error: %@", error.localizedDescription)
                 self.onDisconnected(epoch: epoch)
             }
+        }
+    }
+
+    /// (A) The peer presented a fresh public key but our RPCs still time out:
+    /// the agent was re-paired (new code / wiped ~/.hermes/mobile) while we
+    /// hold the old PSK-less keys, so no derivation can converge — the app
+    /// would otherwise sit on 30s timeouts forever with no way to tell why.
+    /// Two consecutive timeouts with the peer present is the signature; mark
+    /// the server offline so "Re-pair in Settings" becomes the obvious action.
+    /// Keys are deliberately NOT deleted here: a timeout streak must never
+    /// destroy a pairing that may still be valid, and Re-pair already clears
+    /// them (removeServer -> clearKeys).
+    private func noteRPCTimeout() {
+        lock.lock()
+        consecutiveTimeouts += 1
+        let count = consecutiveTimeouts
+        let trip = count >= 2 && sawPeerPublicKey && isConnected && !needsRepair
+        lock.unlock()
+        guard trip else { return }
+        log("key mismatch: %d RPCs timed out after the peer sent a public key — needs re-pair", count)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.needsRepair = true
+            self.isConnected = false
+            self.onStatusChange?()
         }
     }
 
