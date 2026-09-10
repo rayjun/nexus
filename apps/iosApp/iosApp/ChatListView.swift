@@ -82,16 +82,18 @@ struct ChatListView: View {
 
     @ViewBuilder
     private var content: some View {
-        if relay.servers.isEmpty {
-            emptyNoServers
-        } else if store.bots.filter({ !$0.isTombstoned }).isEmpty {
-            emptyNoBots
-        } else {
-            VStack(spacing: 0) {
-                topBar
-                if !searchText.isEmpty || !store.bots.isEmpty {
-                    rosterList
-                }
+        VStack(spacing: 0) {
+            // The bar is ALWAYS rendered: with an empty roster it used to be
+            // skipped entirely, so the "+" the empty-state copy points at, the
+            // search button and — worst — the settings gear were all missing,
+            // leaving Settings/Servers/re-pair unreachable until a bot existed.
+            topBar
+            if relay.servers.isEmpty {
+                emptyNoServers
+            } else if store.bots.filter({ !$0.isTombstoned }).isEmpty {
+                emptyNoBots
+            } else if !searchText.isEmpty || !store.bots.isEmpty {
+                rosterList
             }
         }
     }
@@ -285,7 +287,7 @@ struct ChatListView: View {
             Image(systemName: "server.rack")
                 .font(.system(size: 40)).foregroundStyle(NexusStyle.subtleText)
             Text("No servers yet")
-                .font(.system(size: 16, weight: .medium)).foregroundStyle(NexusStyle.muted)
+                .font(.system(size: 16, weight: .medium)).foregroundStyle(NexusStyle.text)
             Text("Pair a server to start chatting")
                 .font(.system(size: 14)).foregroundStyle(NexusStyle.muted)
             Button {
@@ -310,7 +312,7 @@ struct ChatListView: View {
             Image(systemName: "person.2.waveform")
                 .font(.system(size: 40)).foregroundStyle(NexusStyle.subtleText)
             Text("No bots yet")
-                .font(.system(size: 16, weight: .medium)).foregroundStyle(NexusStyle.muted)
+                .font(.system(size: 16, weight: .medium)).foregroundStyle(NexusStyle.text)
             Text("Tap + to create your first bot — one bot per Hermes profile")
                 .font(.system(size: 14)).foregroundStyle(NexusStyle.muted)
                 .multilineTextAlignment(.center)
