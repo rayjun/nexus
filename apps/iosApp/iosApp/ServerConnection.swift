@@ -459,8 +459,14 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    private func log(_ format: StaticString, _ args: CVarArg...) {
-        os_log(format, log: connLog, type: .info, args)
+    /// os_log cannot take a forwarded `CVarArg...` array: handing it the
+    /// array as a single argument made the formatter treat an Array as an
+    /// object and segfault (EXC_BAD_ACCESS in _os_log_fmt_flatten_object),
+    /// killing the app on the first relay message that logged anything.
+    /// Render the string first, then log it as one opaque argument.
+    private func log(_ format: String, _ args: CVarArg...) {
+        let rendered = String(format: format, arguments: args)
+        os_log("%{public}@", log: connLog, type: .info, rendered)
     }
 }
 
