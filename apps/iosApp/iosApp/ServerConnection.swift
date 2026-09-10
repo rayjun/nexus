@@ -37,6 +37,11 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
     /// Key-agreement watchdog (A): the peer presented a fresh plaintext public
     /// key this session, so a mismatch is possible — see noteRPCTimeout().
     private var sawPeerPublicKey = false
+    /// Any decrypted reply since the peer presented its key. A session that
+    /// answered us at least once is WORKING, however many later RPCs fail
+    /// (dropped frame, app suspended, relay hiccup) — those must never be
+    /// escalated to "needs re-pair".
+    private var receivedReplySincePeerKey = false
     private var consecutiveTimeouts = 0
     /// True once we concluded the E2E keys cannot converge (agent re-paired
     /// with a new code while we still hold the old PSK-less keys). The roster
@@ -274,6 +279,7 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
             if encKey.isEmpty && isPairingInProgress {
                 // pairing: this data is the agent's public key (plaintext)
                 sawPeerPublicKey = true
+                receivedReplySincePeerKey = false
                 sendPublicKey()
                 handleAgentPublicKey(payload)
             } else if !encKey.isEmpty, isPlaintextPublicKey(payload) {
@@ -282,6 +288,7 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
                 // keys so a new connection never reuses the old key+nonce
                 // space (ChaCha20 keystream reuse protection).
                 sawPeerPublicKey = true
+                receivedReplySincePeerKey = false
                 handleRekey(payload)
             } else if !encKey.isEmpty {
                 handleEncryptedData(payload)
@@ -372,7 +379,12 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
             lock.lock()
             let cont = pending.removeValue(forKey: id)
             consecutiveTimeouts = 0
+            receivedReplySincePeerKey = true
             lock.unlock()
+            // The peer decrypted and answered: whatever we concluded about the
+            // keys is void. Un-latch, otherwise a single timeout streak leaves
+            // the server "offline" until the next socket reconnect.
+            clearNeedsRepair()
             let result = rpc["result"] ?? [:]
             // The relay agent returns {"error": "..."} INSIDE result for
             // blocked/failed methods. Surface it as an error instead of
@@ -482,19 +494,39 @@ final class ServerConnection: NSObject, URLSessionWebSocketDelegate {
     /// the agent was re-paired (new code / wiped ~/.hermes/mobile) while we
     /// hold the old PSK-less keys, so no derivation can converge — the app
     /// would otherwise sit on 30s timeouts forever with no way to tell why.
-    /// Two consecutive timeouts with the peer present is the signature; mark
-    /// the server offline so "Re-pair in Settings" becomes the obvious action.
+    /// Two consecutive timeouts AND not a single successful reply since that
+    /// key arrived is the signature (a session that answered us even once is
+    /// working, and would otherwise be marked dead by a dropped frame — the
+    /// first cut of this watchdog did exactly that when the post-pairing
+    /// refresh raced the handshake); mark the server offline so
+    /// "Re-pair in Settings" becomes the obvious action.
     /// Keys are deliberately NOT deleted here: a timeout streak must never
     /// destroy a pairing that may still be valid, and Re-pair already clears
     /// them (removeServer -> clearKeys).
+    private func clearNeedsRepair() {
+        lock.lock()
+        let latched = needsRepair
+        lock.unlock()
+        guard latched else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            log("session recovered: peer answered — clearing needs-re-pair (server %@)", self.profile.name)
+            self.needsRepair = false
+            self.isConnected = true
+            self.onStatusChange?()
+        }
+    }
+
     private func noteRPCTimeout() {
         lock.lock()
         consecutiveTimeouts += 1
         let count = consecutiveTimeouts
-        let trip = count >= 2 && sawPeerPublicKey && isConnected && !needsRepair
+        let trip = count >= 2 && sawPeerPublicKey && !receivedReplySincePeerKey
+            && isConnected && !needsRepair
         lock.unlock()
         guard trip else { return }
-        log("key mismatch: %d RPCs timed out after the peer sent a public key — needs re-pair", count)
+        log("key mismatch: %d RPCs timed out with no reply since the peer's public key (server %@) — needs re-pair",
+            count, profile.name)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.needsRepair = true
