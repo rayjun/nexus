@@ -75,7 +75,7 @@ struct AttachChip: View {
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 13))
-                    .foregroundStyle(NexusStyle.subtleText)
+                    .foregroundStyle(NexusStyle.graphic)
             }
             .buttonStyle(.plain)
         }

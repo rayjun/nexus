@@ -85,7 +85,7 @@ enum NexusStyle {
     /// NON-TEXT tier: icons, chevrons, decorative fills, status dots and
     /// disabled controls (3:1 graphics threshold). 3.47:1 light / 4.78:1
     /// dark. NEVER use for text — it does not meet 4.5:1.
-    static let subtleText = Color(UIColor { tc in
+    static let graphic = Color(UIColor { tc in
         tc.userInterfaceStyle == .dark ?
             UIColor(red: 0.4863, green: 0.5098, blue: 0.5647, alpha: 1) :
             UIColor(red: 0.502, green: 0.5255, blue: 0.5686, alpha: 1)

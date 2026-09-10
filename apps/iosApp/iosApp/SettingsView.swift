@@ -101,7 +101,7 @@ struct SettingsView: View {
             if chevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NexusStyle.subtleText)
+                    .foregroundStyle(NexusStyle.graphic)
             }
         }
         .contentShape(Rectangle())
@@ -121,7 +121,7 @@ struct ServersView: View {
                 ForEach(relay.servers) { server in
                     HStack(spacing: 12) {
                         Circle()
-                            .fill(server.isOnline ? NexusStyle.green : NexusStyle.subtleText)
+                            .fill(server.isOnline ? NexusStyle.green : NexusStyle.graphic)
                             .frame(width: 8, height: 8)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.name).font(.system(size: 15, weight: .medium))

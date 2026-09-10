@@ -120,7 +120,7 @@ struct PairingView: View {
                 Button(action: startPairing) {
                     Text(isAdding ? "Adding…" : "Add Server")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(canAdd ? Color.white : NexusStyle.subtleText)
+                        .foregroundStyle(canAdd ? Color.white : NexusStyle.graphic)
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
                         .background(canAdd ? NexusStyle.accentFill : NexusStyle.row)

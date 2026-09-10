@@ -148,7 +148,7 @@ struct ChatListView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(NexusStyle.subtleText)
+                .foregroundStyle(NexusStyle.graphic)
             TextField("Search bots", text: $searchText)
                 .font(.system(size: 15))
                 .foregroundStyle(NexusStyle.text)
@@ -162,7 +162,7 @@ struct ChatListView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 15))
-                        .foregroundStyle(NexusStyle.subtleText)
+                        .foregroundStyle(NexusStyle.graphic)
                 }
                 .buttonStyle(.plain)
             }
@@ -192,7 +192,7 @@ struct ChatListView: View {
             if visibleBots.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 30)).foregroundStyle(NexusStyle.subtleText)
+                        .font(.system(size: 30)).foregroundStyle(NexusStyle.graphic)
                     Text("No bots match \"\(searchText)\"")
                         .font(.system(size: 14)).foregroundStyle(NexusStyle.muted)
                 }
@@ -232,7 +232,7 @@ struct ChatListView: View {
                         }
                     }
                     HStack(spacing: 5) {
-                        Circle().fill(bot.status == .offline ? NexusStyle.subtleText : NexusStyle.green)
+                        Circle().fill(bot.status == .offline ? NexusStyle.graphic : NexusStyle.green)
                             .frame(width: 7, height: 7)
                         Text(bot.lastPreview ?? (bot.status == .offline ? "Offline — re-pair in Settings" : "Start chatting"))
                             .font(.system(size: 13))
@@ -285,7 +285,7 @@ struct ChatListView: View {
     private var emptyNoServers: some View {
         VStack(spacing: 14) {
             Image(systemName: "server.rack")
-                .font(.system(size: 40)).foregroundStyle(NexusStyle.subtleText)
+                .font(.system(size: 40)).foregroundStyle(NexusStyle.graphic)
             Text("No servers yet")
                 .font(.system(size: 16, weight: .medium)).foregroundStyle(NexusStyle.text)
             Text("Pair a server to start chatting")
@@ -310,7 +310,7 @@ struct ChatListView: View {
     private var emptyNoBots: some View {
         VStack(spacing: 14) {
             Image(systemName: "person.2.waveform")
-                .font(.system(size: 40)).foregroundStyle(NexusStyle.subtleText)
+                .font(.system(size: 40)).foregroundStyle(NexusStyle.graphic)
             Text("No bots yet")
                 .font(.system(size: 16, weight: .medium)).foregroundStyle(NexusStyle.text)
             Text("Tap + to create your first bot — one bot per Hermes profile")

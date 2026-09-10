@@ -37,7 +37,7 @@ struct ChatView: View {
             } else if messages.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 34)).foregroundStyle(NexusStyle.subtleText)
+                        .font(.system(size: 34)).foregroundStyle(NexusStyle.graphic)
                     Text("Start chatting with \(resolvedBot.displayTitle)")
                         .font(.system(size: 14)).foregroundStyle(NexusStyle.muted)
                 }
@@ -205,7 +205,7 @@ struct ChatView: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 30))
-                        .foregroundStyle(canSend && !isSending ? NexusStyle.blue : NexusStyle.subtleText)
+                        .foregroundStyle(canSend && !isSending ? NexusStyle.blue : NexusStyle.graphic)
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend || isSending)
