@@ -61,6 +61,7 @@
   .typing{color:var(--accent);font-style:italic}
   .badge{background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;
          border-radius:9px;padding:1px 6px;flex:none}
+  .badge.off{background:transparent;color:var(--faint);border:1px solid var(--border)}
   .more{color:var(--faint);font-size:13px;flex:none;font-weight:600;
         padding:4px 2px;letter-spacing:0}
   .swipe{position:absolute;right:0;top:0;bottom:0;width:88px;
@@ -148,6 +149,43 @@
   .cmdbar .ci .desc{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cmdbar .ci.on{display:flex}
 
+  /* ── Detail layer shipped in main@998bdc9 (contextMenu / manage sheet / toggle) ── */
+  .dim{position:absolute;inset:0;background:rgba(0,0,0,.30);z-index:2}
+  body.light .dim{background:rgba(15,23,42,.18)}
+  .ctx{position:absolute;left:70px;right:70px;top:150px;z-index:3;
+       background:rgba(44,48,58,.94);backdrop-filter:blur(24px);
+       border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;
+       box-shadow:0 20px 56px rgba(0,0,0,.5);animation:pop .16s ease}
+  body.light .ctx{background:rgba(252,252,254,.96);border-color:rgba(0,0,0,.06)}
+  @keyframes pop{from{transform:scale(.92);opacity:0}to{transform:none;opacity:1}}
+  .ctx .ci{display:flex;align-items:center;gap:12px;padding:12px 15px;font-size:14.5px}
+  .ctx .ci:not(:last-child){border-bottom:1px solid rgba(255,255,255,.09)}
+  body.light .ctx .ci:not(:last-child){border-color:rgba(0,0,0,.07)}
+  .ctx .ci svg{width:18px;height:18px;stroke:var(--text);flex:none}
+  .ctx .ci.danger{color:var(--red)}
+  .ctx .ci.danger svg{stroke:var(--red)}
+  .tgl{width:47px;height:29px;border-radius:15px;background:var(--accent);
+       flex:none;margin-left:auto;position:relative}
+  .tgl i{position:absolute;top:2.5px;right:2.5px;width:24px;height:24px;
+       border-radius:50%;background:#fff;display:block;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;
+        padding:14px;display:flex;flex-direction:column;gap:12px}
+  .card .ir{display:flex;gap:10px;align-items:flex-start}
+  .card .ir .k{font-size:12px;font-weight:600;color:var(--muted);width:88px;flex:none}
+  .card .ir .v{font-size:14px;color:var(--text);flex:1;min-width:0;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dangerbtn{width:100%;text-align:center;font-size:15px;font-weight:600;color:var(--red);
+        background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.25);
+        border-radius:14px;padding:13px}
+  .note{padding:0 4px 20px;font-size:12px;color:var(--faint);line-height:1.5}
+  .searchrow{display:flex;align-items:center;gap:10px;padding:10px 18px 6px}
+  .searchrow .q{flex:1;font-size:15px;color:var(--text);min-width:0}
+  .searchrow .q i{color:var(--accent);font-style:normal}
+  .searchrow .cancel{font-size:14px;font-weight:600;color:var(--accent);flex:none}
+  .empty{display:flex;flex-direction:column;align-items:center;gap:10px;
+         padding:70px 0;color:var(--muted);font-size:14px}
+  .empty svg{width:30px;height:30px;stroke:var(--faint)}
+
 
   /* settings */
   .setrow{display:flex;align-items:center;gap:11px;padding:13px 20px;border-bottom:1px solid var(--border)}
@@ -176,7 +214,7 @@
 <button id="themeBtn" onclick="document.body.classList.toggle('light');this.textContent=document.body.classList.contains('light')?'Dark':'Light'"
   style="position:fixed;top:8px;right:12px;z-index:99;background:var(--accent);color:#fff;border:none;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;font-family:var(--font);cursor:pointer">Dark</button>
 
-<h1 class="title">Nexus v2 — Grok-style minimal · 4 screens</h1>
+<h1 class="title">Nexus v2 — Grok-style minimal · 10 frames · bot = Hermes profile · aligned to main@998bdc9</h1>
 
 <!-- ════════════ SCREEN 1 : Chat list (home) ══════════════ -->
 <div class="phone">
@@ -186,7 +224,7 @@
       <svg fill="none" stroke-width="1.6" viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--text)"><path d="M11 4a7 7 0 107 7M11 4a7 7 0 11-7 7M21 21l-4.3-4.3"/></svg>
       <div class="actions">
         <svg class="plus" fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-        <svg fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+        <svg fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       </div>
     </div>
     <div class="list">
@@ -199,7 +237,6 @@
           </div>
           <div class="preview"><span class="you">You:</span> can you review the PR?</div>
         </div>
-        <span class="more">•••</span>
       </div>
       <div class="row">
         <div class="avatar" style="background:#8b5cf6">R</div>
@@ -210,7 +247,6 @@
           </div>
           <div class="preview">here's the summary of the latest results…</div>
         </div>
-        <span class="more">•••</span>
       </div>
       <div class="row">
         <div class="avatar" style="background:#22c55e">D</div>
@@ -221,18 +257,156 @@
           </div>
           <div class="preview typing">typing…</div>
         </div>
-        <span class="more">•••</span>
       </div>
       <div class="row off">
         <div class="avatar" style="background:#64748b">M</div>
         <div class="mid">
           <div class="top">
             <div class="name"><b>Memory Bot</b></div>
-            <span class="badge">offline</span>
+            <span class="badge off">offline</span>
           </div>
           <div class="preview">Last seen 2h ago · re-pair in Settings</div>
         </div>
-        <span class="more">•••</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ SCREEN 1b : Home — long-press a row → contextMenu ══════════ -->
+<div class="phone">
+  <div class="status"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="screen">
+    <div class="bar">
+      <svg fill="none" stroke-width="1.6" viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--text)"><path d="M11 4a7 7 0 107 7M11 4a7 7 0 11-7 7M21 21l-4.3-4.3"/></svg>
+      <div class="actions">
+        <svg class="plus" fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <svg fill="none" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </div>
+    </div>
+    <div class="list">
+      <div class="row">
+        <div class="avatar" style="background:#3b82f6">A</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Alex</b></div>
+            <span class="time">9:41</span>
+          </div>
+          <div class="preview"><span class="you">You:</span> can you review the PR?</div>
+        </div>
+      </div>
+      <div class="row" style="background:var(--surface2)">
+        <div class="avatar" style="background:#8b5cf6">R</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Research Bot</b><span class="tag">arch</span></div>
+            <span class="time">8:12</span>
+          </div>
+          <div class="preview">here's the summary of the latest results…</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="avatar" style="background:#22c55e">D</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Dev Helper</b><span class="tag">laptop</span></div>
+            <span class="time">07:30</span>
+          </div>
+          <div class="preview typing">typing…</div>
+        </div>
+      </div>
+    </div>
+    <div class="dim"></div>
+    <div class="ctx">
+      <div class="ci"><svg fill="none" stroke-width="1.7" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h9"/><circle cx="18.5" cy="18" r="2.4"/></svg><span>Rename / Info</span></div>
+      <div class="ci danger"><svg fill="none" stroke-width="1.7" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg><span>Delete from list</span></div>
+    </div>
+    <div style="position:absolute;left:0;right:0;top:330px;text-align:center;
+                font-size:11.5px;color:var(--faint);z-index:3">
+      long-press · no visible affordance
+    </div>
+  </div>
+</div>
+
+<!-- ════════ SCREEN 1c : Home — tap 🔍 → search expands (Cancel returns the idle bar) ══════════ -->
+<div class="phone">
+  <div class="status"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="screen">
+    <div class="searchrow">
+      <svg fill="none" stroke-width="1.7" viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--faint);flex:none"><path d="M11 4a7 7 0 107 7M11 4a7 7 0 11-7 7M21 21l-4.3-4.3"/></svg>
+      <div class="q">bot<i>|</i></div>
+      <div class="cancel">Cancel</div>
+    </div>
+    <div class="list">
+      <div class="row">
+        <div class="avatar" style="background:#8b5cf6">R</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Research Bot</b><span class="tag">glm-5.2</span></div>
+            <span class="time">8:12</span>
+          </div>
+          <div class="preview">here's the summary of the latest results…</div>
+        </div>
+      </div>
+      <div class="row off">
+        <div class="avatar" style="background:#64748b">M</div>
+        <div class="mid">
+          <div class="top">
+            <div class="name"><b>Memory Bot</b></div>
+            <span class="badge off">offline</span>
+          </div>
+          <div class="preview">Offline — re-pair in Settings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ SCREEN 2b : Bot manage sheet (long-press → Rename / Info) ══════════ -->
+<div class="phone">
+  <div class="status"><span>9:46</span><span></span><span></span></div>
+  <div class="screen">
+    <div class="list" style="opacity:.55">
+      <div class="row">
+        <div class="avatar" style="background:#3b82f6">A</div>
+        <div class="mid">
+          <div class="top"><div class="name"><b>Alex</b></div><span class="time">9:41</span></div>
+          <div class="preview"><span class="you">You:</span> can you review the PR?</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="avatar" style="background:#8b5cf6">R</div>
+        <div class="mid">
+          <div class="top"><div class="name"><b>Research Bot</b><span class="tag">arch</span></div><span class="time">8:12</span></div>
+          <div class="preview">here's the summary of the latest results…</div>
+        </div>
+      </div>
+    </div>
+    <div class="sheet" style="inset:auto 0 0 0;padding:0;display:flex;flex-direction:column">
+      <div class="handle" style="margin:10px auto 4px"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 16px 10px">
+        <span style="font-size:15px;color:var(--accent)">Done</span>
+        <span style="font-size:15px;font-weight:700">Research Bot</span>
+        <span style="font-size:15px;font-weight:600;color:var(--accent)">Save</span>
+      </div>
+      <div style="padding:0 18px 16px;overflow:hidden">
+        <div class="card" style="margin-bottom:12px">
+          <div class="ir"><div class="k">Profile</div><div class="v">research-bot</div></div>
+          <div class="ir"><div class="k">Server</div><div class="v">arch</div></div>
+          <div class="field" style="margin:0">
+            <label>DISPLAY NAME</label>
+            <input value="Research Bot">
+          </div>
+          <div class="ir"><div class="k">Model</div><div class="v">glm-5.2</div></div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="ir"><div class="k">Thread</div><div class="v">3f9c1a72-8de4-4b1c…</div></div>
+          <div class="ir"><div class="k">Last active</div><div class="v">Sep 10, 2026 at 8:12 AM</div></div>
+        </div>
+        <div class="dangerbtn">Delete from list</div>
+        <div class="note" style="padding:10px 4px 0">
+          This hides the bot on this phone. The Hermes profile stays on the server.
+          (Tapping it raises an alert confirm first.)
+        </div>
       </div>
     </div>
   </div>
@@ -248,32 +422,53 @@
         <div class="mid"><div class="top"><div class="name"><b>Alex</b></div></div>
         <div class="preview">can you review the PR?</div></div></div>
     </div>
-    <div class="sheet">
-      <div class="handle"></div>
-      <h2>New bot</h2>
-      <div class="cap">Creates a new Hermes profile on the selected server.</div>
-      <div class="field">
-        <label>NAME (slug, required)</label>
-        <input value="writer" placeholder="e.g. writer">
+    <div class="sheet" style="padding:0;display:flex;flex-direction:column">
+      <div class="handle" style="margin:14px auto 4px"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 16px 12px">
+        <span style="font-size:15px;color:var(--accent)">Cancel</span>
+        <span style="font-size:15px;font-weight:700">New bot</span>
+        <span style="font-size:15px;font-weight:600;color:var(--accent)">Create</span>
       </div>
-      <div class="field">
-        <label>SERVER</label>
-        <select><option>arch (arch.home — online)</option><option>laptop (192.168… — offline)</option></select>
-      </div>
-      <div class="field">
-        <label>PERSONALITY / SOUL (optional)</label>
-        <textarea placeholder="You are a concise technical writer…"></textarea>
-      </div>
-      <div class="field">
-        <label>MODEL</label>
-        <div class="seg">
-          <div class="opt sel">Default</div>
-          <div class="opt">glm-5.2</div>
-          <div class="opt">gpt-5</div>
+      <div style="padding:0 18px;overflow:hidden">
+        <div class="grouplabel" style="padding:0 4px 8px">Bot</div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="field" style="margin:0">
+            <label>NAME (SLUG)</label>
+            <input value="research-bot">
+          </div>
+          <div class="field" style="margin:0">
+            <label>DISPLAY NAME (OPTIONAL)</label>
+            <input value="Research Bot">
+          </div>
+          <div class="field" style="margin:0">
+            <label>DESCRIPTION (OPTIONAL)</label>
+            <textarea placeholder="What this bot does" style="height:44px"></textarea>
+          </div>
         </div>
+        <div class="grouplabel" style="padding:0 4px 8px">Model</div>
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:15px">
+            <span>glm-5.2</span>
+            <svg fill="none" stroke-width="1.7" viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--faint)"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          
+        </div>
+        <div class="grouplabel" style="padding:0 4px 8px">Server</div>
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:15px">
+            <span><span style="color:var(--green)">●</span> arch</span>
+            <svg fill="none" stroke-width="1.7" viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--faint)"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </div>
+        <div class="grouplabel" style="padding:0 4px 8px">Personality (SOUL.md, optional)</div>
+        <div class="card" style="margin-bottom:14px">
+          <div style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--muted);line-height:1.5">
+            You are a concise technical writer working on Nexus.
+          </div>
+        </div>
+        <div class="note">Each bot is a Hermes profile with its own model, memory and settings.
+          <code>mirror_credentials</code> is never sent.</div>
       </div>
-      <button class="btn">Create bot</button>
-      <button class="btn ghost">Cancel</button>
     </div>
   </div>
 </div>
@@ -283,12 +478,13 @@
   <div class="status"><span>9:43</span><span></span><span></span></div>
   <div class="screen" style="display:flex;flex-direction:column">
     <div class="chathead">
+      <svg style="width:18px;height:18px;stroke:var(--accent);flex:none" fill="none" stroke-width="2.2" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
       <div class="avatar" style="background:#3b82f6">A</div>
       <div style="flex:1">
         <div class="cn">Alex</div>
         <div class="cs">● online</div>
       </div>
-      <svg style="width:20px;height:20px;stroke:var(--muted)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      <svg style="width:16px;height:16px;stroke:var(--muted)" fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </div>
     <div class="msgarea">
       <div class="bub in">Hey Alex, can you review the changes in the relay PR?<div class="ts">9:38</div></div>
@@ -318,43 +514,18 @@
   </div>
 </div>
 
-<!-- ══════════════ SCREEN 3b : Chat — input collapsed ══════════════ -->
-<div class="phone">
-  <div class="status"><span>9:43</span><span></span><span></span></div>
-  <div class="screen" style="display:flex;flex-direction:column">
-    <div class="chathead">
-      <div class="avatar" style="background:#3b82f6">A</div>
-      <div style="flex:1">
-        <div class="cn">Alex</div>
-        <div class="cs">● online</div>
-      </div>
-      <svg style="width:20px;height:20px;stroke:var(--muted)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
-    </div>
-    <div class="msgarea">
-      <div class="bub in">Hey Alex, can you review the changes in the relay PR?<div class="ts">9:38</div></div>
-      <div class="bub out">Sure — I've started the review. Focusing on the E2E key exchange.<div class="ts">9:38</div></div>
-      <div class="bub in">Found one issue: crypto_box_beforenm vs raw scalarmult mismatch.<div class="ts">9:40</div></div>
-      <div class="bub out">Good catch. Fixing now, will paste the verified vectors after.<div class="ts">9:41</div></div>
-    </div>
-    <div class="typerow">
-      <div class="ic" style="font-size:19px">📎</div>
-      <div class="inpwrap"><input class="inp" placeholder="Message Alex…"><span class="emojibtn">😊</span></div>
-      <div class="send"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
-    </div>
-  </div>
-</div>
-
 <!-- ══════════════ SCREEN 3c : Chat — / command popup ══════════════ -->
 <div class="phone">
   <div class="status"><span>9:43</span><span></span></div>
   <div class="screen" style="display:flex;flex-direction:column">
     <div class="chathead">
+      <svg style="width:18px;height:18px;stroke:var(--accent);flex:none" fill="none" stroke-width="2.2" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
       <div class="avatar" style="background:#8b5cf6">R</div>
       <div style="flex:1">
         <div class="cn">Research Bot</div>
         <div class="cs">● online</div>
       </div>
-      <svg style="width:20px;height:20px;stroke:var(--muted)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      <svg style="width:16px;height:16px;stroke:var(--muted)" fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </div>
     <div class="msgarea">
       <div class="bub out">How do I query the latest relay stats?<div class="ts">9:35</div></div>
@@ -379,12 +550,13 @@
   <div class="status"><span>9:44</span><span></span></div>
   <div class="screen" style="display:flex;flex-direction:column">
     <div class="chathead">
+      <svg style="width:18px;height:18px;stroke:var(--accent);flex:none" fill="none" stroke-width="2.2" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
       <div class="avatar" style="background:#22c55e">D</div>
       <div style="flex:1">
         <div class="cn">Dev Helper</div>
         <div class="cs">● online</div>
       </div>
-      <svg style="width:20px;height:20px;stroke:var(--muted)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      <svg style="width:16px;height:16px;stroke:var(--muted)" fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </div>
     <div class="msgarea">
       <div class="bub in">Attach the benchmark logs and I'll run the diff.<div class="ts">9:40</div></div>
@@ -418,25 +590,30 @@
     </div>
     <div class="list">
       <div class="setrow">
-        <div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🖥</div>
+        <div class="avatar" style="width:34px;height:34px;font-size:13px;background:#3b82f6">🖥</div>
         <div style="flex:1"><div class="lbl">Servers</div><div class="sub2">2 connected · pair &amp; manage</div></div>
         <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
       </div>
-      <div class="setrow"><div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🌗</div>
-        <div style="flex:1"><div class="lbl">Appearance</div><div class="sub2">Dark · System</div></div>
-        <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      <div class="setrow">
+        <div class="avatar" style="width:34px;height:34px;font-size:13px;background:#f59e0b">☀️</div>
+        <div style="flex:1"><div class="lbl">Light theme</div><div class="sub2">Day theme is the default</div></div>
+        <div class="tgl"><i></i></div>
       </div>
-      <div class="setrow"><div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🔔</div>
-        <div style="flex:1"><div class="lbl">Notifications</div><div class="sub2">Approvals · Mentions</div></div>
+      <div class="setrow">
+        <div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🔔</div>
+        <div style="flex:1"><div class="lbl">Notifications</div><div class="sub2">Approvals, errors, mentions</div></div>
         <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
       </div>
       <div class="setrow"><div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">🔒</div>
-        <div style="flex:1"><div class="lbl">Privacy & Security</div><div class="sub2">E2E keys · Keychain</div></div>
+        <div style="flex:1"><div class="lbl">Privacy & Security</div><div class="sub2">E2E keys in Keychain only</div></div>
         <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
       </div>
       <div class="setrow"><div class="avatar" style="width:34px;height:34px;font-size:13px;background:#64748b">ℹ️</div>
         <div style="flex:1"><div class="lbl">About</div><div class="sub2">Nexus 0.20.0</div></div>
-        <svg style="width:16px;height:16px;stroke:var(--faint)" fill="none" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="note" style="padding:16px 20px 28px">
+        Flat rows, no section headers, no bot list in Settings — bot management stays on the home rows.
+        Servers is the only sub-page.
       </div>
     </div>
   </div>
